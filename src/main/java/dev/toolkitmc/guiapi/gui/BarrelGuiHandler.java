@@ -60,8 +60,10 @@ public class BarrelGuiHandler {
         int rows = Math.clamp(def.getRows(), 1, 6);
         int finalPage = page;
 
-        SimpleInventory inv = buildInventory(player, def, page, rows * 9);
+        // Register state BEFORE building inventory so that any handleClick call
+        // triggered during screen open (edge case) already sees the correct state.
         OPEN_GUIS.put(player.getUuid(), new OpenState(def, page));
+        SimpleInventory inv = buildInventory(player, def, page, rows * 9);
 
         String pageIndicator = def.getPageCount() > 1
                 ? " §8[" + (page + 1) + "/" + def.getPageCount() + "]"
@@ -83,8 +85,10 @@ public class BarrelGuiHandler {
 
     public static boolean handleClick(ServerPlayerEntity player, GuiDefinition def,
                                       int page, int slot, SlotActionType actionType) {
-        if (actionType != SlotActionType.PICKUP && actionType != SlotActionType.QUICK_MOVE)
-            return true; // consume but ignore
+        // Only PICKUP (left/right click) triggers button actions.
+        // All other action types (QUICK_MOVE, THROW, CLONE, etc.) are consumed silently
+        // to prevent any item manipulation inside the GUI inventory.
+        if (actionType != SlotActionType.PICKUP) return true;
 
         for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() != slot) continue;
@@ -122,7 +126,13 @@ public class BarrelGuiHandler {
 
     private static ItemStack buildStack(GuiDefinition.Button btn) {
         Identifier itemId = Identifier.tryParse(btn.item());
-        Item item = itemId != null ? Registries.ITEM.get(itemId) : Items.STONE;
+        Item item;
+        if (itemId != null && Registries.ITEM.containsId(itemId)) {
+            item = Registries.ITEM.get(itemId);
+        } else {
+            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", btn.item(), btn.slot());
+            item = Items.STONE;
+        }
 
         ItemStack stack = new ItemStack(item);
 
