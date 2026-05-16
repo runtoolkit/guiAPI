@@ -53,6 +53,13 @@ public class GuiRegistry extends SinglePreparationResourceReloader<Map<Identifie
 
                        JsonObject json = GSON.fromJson(reader, JsonObject.class);
 
+                       // Reject unsupported GUI types explicitly (e.g. legacy "dialog" format)
+                       if (json.has("type") && !json.get("type").getAsString().equals("barrel")) {
+                           GuiApiMod.LOGGER.warn("[GuiAPI] Skipping {} — unsupported type '{}'. Only chest/barrel GUIs are supported.",
+                                   fileId, json.get("type").getAsString());
+                           return;
+                       }
+
                        // fileId looks like: <ns>:gui/<name>.json
                        // Compute logical GUI id: <ns>:<name>  (strip "gui/" prefix + ".json")
                        String path = fileId.getPath(); // "gui/my_gui.json"

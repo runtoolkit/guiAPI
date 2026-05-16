@@ -60,8 +60,10 @@ public class BarrelGuiHandler {
         int rows = Math.clamp(def.getRows(), 1, 6);
         int finalPage = page;
 
-        SimpleInventory inv = buildInventory(player, def, page, rows * 9);
+        // Register state BEFORE building inventory so that any handleClick call
+        // triggered during screen open (edge case) already sees the correct state.
         OPEN_GUIS.put(player.getUuid(), new OpenState(def, page));
+        SimpleInventory inv = buildInventory(player, def, page, rows * 9);
 
         String pageIndicator = def.getPageCount() > 1
                 ? " §8[" + (page + 1) + "/" + def.getPageCount() + "]"
@@ -82,17 +84,34 @@ public class BarrelGuiHandler {
     }
 
     public static boolean handleClick(ServerPlayerEntity player, GuiDefinition def,
-                                      int page, int slot, SlotActionType actionType) {
-        if (actionType != SlotActionType.PICKUP && actionType != SlotActionType.QUICK_MOVE)
-            return true; // consume but ignore
+                                      int page, int slot, int mouseButton, SlotActionType actionType) {
+        // Resolve what kind of click this actually is.
+        // mouseButton: 0 = left, 1 = right (Minecraft protocol)
+        // actionType QUICK_MOVE = shift+click
+        final boolean isShift = actionType == SlotActionType.QUICK_MOVE;
+        final boolean isLeft  = !isShift && mouseButton == 0 && actionType == SlotActionType.PICKUP;
+        final boolean isRight = !isShift && mouseButton == 1 && actionType == SlotActionType.PICKUP;
+
+        // Consume every action type to block item manipulation.
+        // Only PICKUP and QUICK_MOVE can actually trigger button actions.
+        if (!isLeft && !isRight && !isShift) return true;
 
         for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() != slot) continue;
-            if (!evaluateCondition(player, btn)) continue; // invisible button, ignore
+            if (!evaluateCondition(player, btn)) continue;
+
+            // Check click_type filter
+            boolean matches = switch (btn.clickType()) {
+                case LEFT  -> isLeft;
+                case RIGHT -> isRight;
+                case SHIFT -> isShift;
+                case ANY   -> isLeft || isRight || isShift;
+            };
+            if (!matches) continue;
 
             for (GuiDefinition.ButtonAction action : btn.actions()) {
                 boolean shouldBreak = executeAction(player, def, page, action);
-                if (shouldBreak) break; // close/open_gui terminates chain
+                if (shouldBreak) break;
             }
             return true;
         }
@@ -122,7 +141,13 @@ public class BarrelGuiHandler {
 
     private static ItemStack buildStack(GuiDefinition.Button btn) {
         Identifier itemId = Identifier.tryParse(btn.item());
-        Item item = itemId != null ? Registries.ITEM.get(itemId) : Items.STONE;
+        Item item;
+        if (itemId != null && Registries.ITEM.containsId(itemId)) {
+            item = Registries.ITEM.get(itemId);
+        } else {
+            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", btn.item(), btn.slot());
+            item = Items.STONE;
+        }
 
         ItemStack stack = new ItemStack(item);
 

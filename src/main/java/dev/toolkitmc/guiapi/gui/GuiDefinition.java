@@ -23,6 +23,7 @@ import java.util.Optional;
  *       "name": "§bClick Me",
  *       "lore": ["§7Line 1"],
  *       "glint": true,                    // enchantment glint effect
+ *       "click_type": "any",             // any (default) | left | right | shift
  *       "condition": {                    // optional visibility condition
  *         "type": "has_tag",             // has_tag | score_gt | score_lt | score_eq
  *         "value": "my_tag"             // tag name OR "objective:min:max" for score
@@ -57,6 +58,26 @@ import java.util.Optional;
 public class GuiDefinition {
 
     // ── Enums ────────────────────────────────────────────────────────────────
+
+    /**
+     * Which mouse button triggers this button's actions.
+     *   ANY   — left or right click (default, original behaviour)
+     *   LEFT  — only left click
+     *   RIGHT — only right click
+     *   SHIFT — only shift+left click (QUICK_MOVE)
+     */
+    public enum ClickType {
+        ANY, LEFT, RIGHT, SHIFT;
+
+        public static ClickType fromString(String s) {
+            return switch (s.toLowerCase()) {
+                case "left"  -> LEFT;
+                case "right" -> RIGHT;
+                case "shift" -> SHIFT;
+                default      -> ANY;
+            };
+        }
+    }
 
     public enum ActionType {
         RUN_COMMAND, CLOSE, OPEN_GUI, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE;
@@ -112,6 +133,7 @@ public class GuiDefinition {
             String name,
             List<String> lore,
             boolean glint,
+            ClickType clickType,
             Optional<ButtonCondition> condition,
             List<ButtonAction> actions
     ) {}
@@ -157,6 +179,10 @@ public class GuiDefinition {
         String name = b.has("name") ? b.get("name").getAsString() : "";
         boolean glint = b.has("glint") && b.get("glint").getAsBoolean();
 
+        ClickType clickType = b.has("click_type")
+                ? ClickType.fromString(b.get("click_type").getAsString())
+                : ClickType.ANY;
+
         List<String> lore = new ArrayList<>();
         if (b.has("lore") && b.get("lore").isJsonArray()) {
             for (JsonElement l : b.getAsJsonArray("lore"))
@@ -184,7 +210,7 @@ public class GuiDefinition {
 
         if (actions.isEmpty()) actions.add(new ButtonAction(ActionType.CLOSE, ""));
 
-        return new Button(slot, page, item, name, lore, glint, condition, actions);
+        return new Button(slot, page, item, name, lore, glint, clickType, condition, actions);
     }
 
     private static ButtonAction parseAction(JsonObject a) {
@@ -201,7 +227,8 @@ public class GuiDefinition {
 
     public Identifier getId()        { return id; }
     public String getTitle()         { return title; }
-    public int getRows()             { return rows; }
+    /** Always in [1, 6]. */
+    public int getRows()             { return Math.clamp(rows, 1, 6); }
     public int getPageCount()        { return pageCount; }
     public List<Button> getButtons() { return buttons; }
 
