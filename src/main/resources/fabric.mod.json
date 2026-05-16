@@ -3,18 +3,25 @@
   "id": "guiapi",
   "version": "${version}",
   "name": "GUI API",
-  "description": "Datapack-driven GUI system for Minecraft 1.21.1. Supports barrel GUIs and custom dialog screens via JSON definitions.",
-  "authors": ["ToolkitMC"],
+  "description": "Datapack-driven chest GUI system for Minecraft 1.21.1.",
+  "authors": [
+    {
+      "name": "IronCrest",
+      "contact": {
+        "sources": "https://github.com/asn44nb"
+      }
+    }
+  ],
   "contact": {
-    "sources": "https://github.com/ToolkitMC/guiapi"
+    "sources": "https://github.com/runtoolkit/guiAPI"
   },
   "license": "MIT",
   "environment": "*",
   "entrypoints": {
-    "main": ["dev.toolkitmc.guiapi.GuiApiMod"],
-    "client": ["dev.toolkitmc.guiapi.GuiApiClient"]
+    "main": [
+      "dev.toolkitmc.guiapi.GuiApiMod"
+    ]
   },
-  "mixins": [],
   "depends": {
     "fabricloader": ">=0.16.5",
     "fabric-api": "*",

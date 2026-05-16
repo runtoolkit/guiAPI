@@ -4,17 +4,23 @@ import dev.toolkitmc.guiapi.GuiApiMod;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.LoreComponent;
 import net.minecraft.component.type.NbtComponent;
+import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.SimpleInventory;
 import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
 import net.minecraft.item.Items;
+import net.minecraft.nbt.NbtCompound;
 import net.minecraft.registry.Registries;
+import net.minecraft.scoreboard.ScoreHolder;
+import net.minecraft.scoreboard.Scoreboard;
+import net.minecraft.scoreboard.ScoreboardObjective;
 import net.minecraft.screen.GenericContainerScreenHandler;
 import net.minecraft.screen.NamedScreenHandlerFactory;
 import net.minecraft.screen.ScreenHandlerType;
 import net.minecraft.screen.slot.SlotActionType;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -25,75 +31,89 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Opens a chest/barrel-style GUI populated from a GuiDefinition.
+ * Server-side chest GUI handler.
  *
- * Uses GenericContainerScreenHandler (1–6 rows of 9 slots).
- * Slot-click interception happens via the custom screen handler subclass.
+ * Features:
+ *  - Multi-page support (page tracked per player)
+ *  - Conditional buttons (has_tag, score_gt/lt/eq)
+ *  - Multiple actions per button (executed in order)
+ *  - Enchantment glint on items
+ *  - run_command with run_with: player|console
  */
 public class BarrelGuiHandler {
 
-    // Track which GUI each player has open: player UUID → GuiDefinition
-    private static final Map<UUID, GuiDefinition> OPEN_GUIS = new HashMap<>();
+    /** Player UUID → currently open GUI state */
+    private static final Map<UUID, OpenState> OPEN_GUIS = new HashMap<>();
+
+    private record OpenState(GuiDefinition def, int page) {}
 
     private BarrelGuiHandler() {}
 
-    /**
-     * Open the GUI for a player on the server side.
-     */
-    public static void open(ServerPlayerEntity player, GuiDefinition def) {
-        // Clamp rows: GenericContainerScreenHandler supports 1–6 rows (9 slots each)
-        int rows = Math.clamp(def.getRows(), 1, 6);
-        SimpleInventory inv = buildInventory(def, rows * 9);
+    // ── Public API ───────────────────────────────────────────────────────────
 
-        OPEN_GUIS.put(player.getUuid(), def);
+    public static void open(ServerPlayerEntity player, GuiDefinition def) {
+        open(player, def, 0);
+    }
+
+    public static void open(ServerPlayerEntity player, GuiDefinition def, int page) {
+        page = Math.clamp(page, 0, def.getPageCount() - 1);
+        int rows = Math.clamp(def.getRows(), 1, 6);
+        int finalPage = page;
+
+        SimpleInventory inv = buildInventory(player, def, page, rows * 9);
+        OPEN_GUIS.put(player.getUuid(), new OpenState(def, page));
+
+        String pageIndicator = def.getPageCount() > 1
+                ? " §8[" + (page + 1) + "/" + def.getPageCount() + "]"
+                : "";
 
         player.openHandledScreen(new NamedScreenHandlerFactory() {
             @Override
             public Text getDisplayName() {
-                return Text.literal(def.getTitle());
+                return Text.literal(def.getTitle() + pageIndicator);
             }
 
             @Override
             public net.minecraft.screen.ScreenHandler createMenu(
                     int syncId, PlayerInventory playerInv, PlayerEntity p) {
-
-                return new GuiScreenHandler(
-                        rowsToType(rows), syncId, playerInv, inv, rows, def
-                );
+                return new GuiScreenHandler(rowsToType(rows), syncId, playerInv, inv, rows, def, finalPage);
             }
         });
     }
 
-    /**
-     * Called when a player clicks a slot. Returns true if the click was consumed.
-     * Dispatched from GuiScreenHandler.
-     */
     public static boolean handleClick(ServerPlayerEntity player, GuiDefinition def,
-                                      int slot, SlotActionType actionType) {
-        if (actionType == SlotActionType.PICKUP || actionType == SlotActionType.QUICK_MOVE) {
-            for (GuiDefinition.Button btn : def.getButtons()) {
-                if (btn.slot() == slot) {
-                    executeAction(player, def, btn.action());
-                    return true;
-                }
+                                      int page, int slot, SlotActionType actionType) {
+        if (actionType != SlotActionType.PICKUP && actionType != SlotActionType.QUICK_MOVE)
+            return true; // consume but ignore
+
+        for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
+            if (btn.slot() != slot) continue;
+            if (!evaluateCondition(player, btn)) continue; // invisible button, ignore
+
+            for (GuiDefinition.ButtonAction action : btn.actions()) {
+                boolean shouldBreak = executeAction(player, def, page, action);
+                if (shouldBreak) break; // close/open_gui terminates chain
             }
+            return true;
         }
-        return true; // always consume — no item extraction from GUI inventories
+        return true;
     }
 
     public static void onClose(UUID playerUuid) {
         OPEN_GUIS.remove(playerUuid);
     }
 
-    // ── Private helpers ──────────────────────────────────────────────────────
+    // ── Inventory builder ────────────────────────────────────────────────────
 
-    private static SimpleInventory buildInventory(GuiDefinition def, int size) {
+    private static SimpleInventory buildInventory(ServerPlayerEntity player,
+                                                  GuiDefinition def, int page, int size) {
         SimpleInventory inv = new SimpleInventory(size) {
-            @Override public boolean canPlayerUse(PlayerEntity player) { return true; }
+            @Override public boolean canPlayerUse(PlayerEntity p) { return true; }
         };
 
-        for (GuiDefinition.Button btn : def.getButtons()) {
+        for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() < 0 || btn.slot() >= size) continue;
+            if (!evaluateCondition(player, btn)) continue; // hide button
             inv.setStack(btn.slot(), buildStack(btn));
         }
 
@@ -102,19 +122,15 @@ public class BarrelGuiHandler {
 
     private static ItemStack buildStack(GuiDefinition.Button btn) {
         Identifier itemId = Identifier.tryParse(btn.item());
-        Item item = itemId != null
-                ? Registries.ITEM.get(itemId)
-                : Items.STONE;
+        Item item = itemId != null ? Registries.ITEM.get(itemId) : Items.STONE;
 
         ItemStack stack = new ItemStack(item);
 
-        // Custom name
         if (!btn.name().isEmpty()) {
             stack.set(DataComponentTypes.CUSTOM_NAME,
                     Text.literal(btn.name()).styled(s -> s.withItalic(false)));
         }
 
-        // Lore
         if (!btn.lore().isEmpty()) {
             List<Text> loreTexts = btn.lore().stream()
                     .map(l -> (Text) Text.literal(l).styled(s -> s.withItalic(false)))
@@ -122,42 +138,125 @@ public class BarrelGuiHandler {
             stack.set(DataComponentTypes.LORE, new LoreComponent(loreTexts));
         }
 
-        // Tag the stack so we can block extraction later
-        stack.set(DataComponentTypes.CUSTOM_DATA,
-                NbtComponent.of(new net.minecraft.nbt.NbtCompound()));
+        // Enchantment glint — add a hidden glint flag via custom_data
+        if (btn.glint()) {
+            stack.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
+        }
+
+        // Mark as GUI item (blocks extraction)
+        stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(new NbtCompound()));
 
         return stack;
     }
 
-    private static void executeAction(ServerPlayerEntity player,
-                                      GuiDefinition def,
-                                      GuiDefinition.ButtonAction action) {
+    // ── Condition evaluation ─────────────────────────────────────────────────
+
+    private static boolean evaluateCondition(ServerPlayerEntity player,
+                                             GuiDefinition.Button btn) {
+        if (btn.condition().isEmpty()) return true;
+
+        GuiDefinition.ButtonCondition cond = btn.condition().get();
+        return switch (cond.type()) {
+            case HAS_TAG  -> player.getCommandTags().contains(cond.value());
+            case SCORE_GT -> getScore(player, cond.value().split(":"), 0) >
+                             parseCondInt(cond.value().split(":"), 1);
+            case SCORE_LT -> getScore(player, cond.value().split(":"), 0) <
+                             parseCondInt(cond.value().split(":"), 1);
+            case SCORE_EQ -> getScore(player, cond.value().split(":"), 0) ==
+                             parseCondInt(cond.value().split(":"), 1);
+        };
+    }
+
+    /** value format: "objective:threshold" */
+    private static int getScore(ServerPlayerEntity player, String[] parts, int objIndex) {
+        if (parts.length < 1) return 0;
+        try {
+            Scoreboard sb = player.getServer().getScoreboard();
+            ScoreboardObjective obj = sb.getNullableObjective(parts[objIndex]);
+            if (obj == null) return 0;
+            var score = sb.getScore(ScoreHolder.fromName(player.getNameForScoreboard()), obj);
+            return score != null ? score.getScore() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static int parseCondInt(String[] parts, int index) {
+        if (parts.length <= index) return 0;
+        try { return Integer.parseInt(parts[index]); }
+        catch (NumberFormatException e) { return 0; }
+    }
+
+    // ── Action execution ─────────────────────────────────────────────────────
+
+    /**
+     * Execute a single action.
+     * @return true if the action chain should stop (screen was closed/changed)
+     */
+    private static boolean executeAction(ServerPlayerEntity player, GuiDefinition def,
+                                         int currentPage, GuiDefinition.ButtonAction action) {
+        MinecraftServer server = player.getServer();
         switch (action.type()) {
             case RUN_COMMAND -> {
                 String cmd = action.value().startsWith("/")
-                        ? action.value().substring(1)
-                        : action.value();
-                player.getServer().getCommandManager()
-                      .executeWithPrefix(player.getCommandSource(), cmd);
+                        ? action.value().substring(1) : action.value();
+                if (action.runWith() == GuiDefinition.RunWith.CONSOLE) {
+                    server.getCommandManager().executeWithPrefix(
+                            server.getCommandSource(), cmd);
+                } else {
+                    server.getCommandManager().executeWithPrefix(
+                            player.getCommandSource(), cmd);
+                }
             }
-            case CLOSE -> player.closeHandledScreen();
+            case CLOSE -> {
+                player.closeHandledScreen();
+                return true;
+            }
             case OPEN_GUI -> {
                 player.closeHandledScreen();
                 Identifier targetId = Identifier.tryParse(action.value());
                 if (targetId != null) {
-                    // Re-open via command so the registry does the lookup
                     dev.toolkitmc.guiapi.loader.GuiRegistry.INSTANCE
                             .get(targetId)
                             .ifPresentOrElse(
                                     target -> open(player, target),
                                     () -> player.sendMessage(
-                                            Text.literal("[GuiAPI] GUI not found: " + targetId), false)
-                            );
+                                            Text.literal("[GuiAPI] GUI not found: " + targetId), false));
                 }
+                return true;
             }
             case MESSAGE -> player.sendMessage(Text.literal(action.value()), false);
+            case NEXT_PAGE -> {
+                int next = currentPage + 1;
+                if (next < def.getPageCount()) {
+                    player.closeHandledScreen();
+                    open(player, def, next);
+                }
+                return true;
+            }
+            case PREV_PAGE -> {
+                int prev = currentPage - 1;
+                if (prev >= 0) {
+                    player.closeHandledScreen();
+                    open(player, def, prev);
+                }
+                return true;
+            }
+            case GOTO_PAGE -> {
+                try {
+                    int target = Integer.parseInt(action.value());
+                    if (target >= 0 && target < def.getPageCount()) {
+                        player.closeHandledScreen();
+                        open(player, def, target);
+                    }
+                } catch (NumberFormatException ignored) {}
+                return true;
+            }
         }
+        return false;
     }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private static ScreenHandlerType<GenericContainerScreenHandler> rowsToType(int rows) {
         return switch (rows) {

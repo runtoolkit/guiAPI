@@ -9,39 +9,33 @@ import net.minecraft.screen.ScreenHandlerType;
 import net.minecraft.screen.slot.SlotActionType;
 import net.minecraft.server.network.ServerPlayerEntity;
 
-/**
- * Custom GenericContainerScreenHandler that intercepts all slot actions
- * and routes them to BarrelGuiHandler instead of allowing item movement.
- */
 public class GuiScreenHandler extends GenericContainerScreenHandler {
 
     private final GuiDefinition definition;
+    private final int page;
 
     public GuiScreenHandler(ScreenHandlerType<?> type, int syncId,
                             PlayerInventory playerInv, Inventory inv,
-                            int rows, GuiDefinition definition) {
+                            int rows, GuiDefinition definition, int page) {
         super(type, syncId, playerInv, inv, rows);
         this.definition = definition;
+        this.page = page;
     }
 
     @Override
     public void onSlotClick(int slotIndex, int button, SlotActionType actionType, PlayerEntity player) {
-        // Block all inventory interaction — GUI slots are read-only.
-        // Only fire our action handler if the click is in the GUI area (not player inv).
         if (slotIndex >= 0 && slotIndex < definition.getRows() * 9) {
             if (player instanceof ServerPlayerEntity sp) {
-                BarrelGuiHandler.handleClick(sp, definition, slotIndex, actionType);
+                BarrelGuiHandler.handleClick(sp, definition, page, slotIndex, actionType);
             }
-            // Do NOT call super — prevents item pickup/swap
-            return;
+            return; // consume, don't call super
         }
-        // Clicks in player inventory area: also block to prevent shift-click item transfer
-        // super.onSlotClick(slotIndex, button, actionType, player); // intentionally omitted
+        // Block player inventory clicks too
     }
 
     @Override
     public ItemStack quickMove(PlayerEntity player, int slot) {
-        return ItemStack.EMPTY; // Disable shift-click
+        return ItemStack.EMPTY;
     }
 
     @Override

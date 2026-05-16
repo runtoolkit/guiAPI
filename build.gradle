@@ -14,35 +14,15 @@ repositories {
     maven { url = "https://maven.fabricmc.net/" }
 }
 
-loom {
-    splitEnvironmentSourceSets()
-
-    mods {
-        guiapi {
-            sourceSet sourceSets.main
-            sourceSet sourceSets.client
-        }
-    }
-}
-
 dependencies {
-    // Minecraft + mappings
     minecraft "com.mojang:minecraft:1.21.1"
     mappings "net.fabricmc:yarn:1.21.1+build.3:v2"
-
-    // Fabric Loader
     modImplementation "net.fabricmc:fabric-loader:0.16.5"
-
-    // Fabric API
-    modImplementation "net.fabricmc.fabric-api:fabric-api:0.104.0+1.21.1"
-
-    // Gson (bundled with Minecraft, just declare for IDE)
-    // compileOnly 'com.google.code.gson:gson:2.10.1'
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.116.12+1.21.1"
 }
 
 processResources {
     inputs.property "version", project.version
-
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }

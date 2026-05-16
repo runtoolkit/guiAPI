@@ -4,9 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.context.CommandContext;
 import dev.toolkitmc.guiapi.gui.BarrelGuiHandler;
 import dev.toolkitmc.guiapi.gui.GuiDefinition;
-import dev.toolkitmc.guiapi.gui.OpenDialogPayload;
 import dev.toolkitmc.guiapi.loader.GuiRegistry;
-import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.command.argument.IdentifierArgumentType;
 import net.minecraft.server.command.CommandManager;
@@ -27,7 +25,6 @@ import java.util.List;
 public class GuiCommand {
 
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
-
         dispatcher.register(
             CommandManager.literal("guiapi")
                 .requires(src -> src.hasPermissionLevel(2))
@@ -43,7 +40,6 @@ public class GuiCommand {
                             return builder.buildFuture();
                         })
 
-                        // /guiapi open <id>  — self
                         .executes(ctx -> {
                             ServerPlayerEntity player = ctx.getSource().getPlayer();
                             if (player == null) {
@@ -54,7 +50,6 @@ public class GuiCommand {
                             return openGui(ctx, List.of(player));
                         })
 
-                        // /guiapi open <id> <targets>
                         .then(CommandManager.argument("targets", EntityArgumentType.players())
                             .executes(ctx -> openGui(ctx,
                                     EntityArgumentType.getPlayers(ctx, "targets"))))
@@ -77,10 +72,7 @@ public class GuiCommand {
         }
 
         for (ServerPlayerEntity player : targets) {
-            switch (def.getType()) {
-                case BARREL -> BarrelGuiHandler.open(player, def);
-                case DIALOG -> ServerPlayNetworking.send(player, new OpenDialogPayload(def.getId()));
-            }
+            BarrelGuiHandler.open(player, def);
         }
 
         ctx.getSource().sendFeedback(
@@ -97,7 +89,8 @@ public class GuiCommand {
         }
         StringBuilder sb = new StringBuilder("[GuiAPI] Loaded GUIs (" + all.size() + "):\n");
         all.forEach((id, def) ->
-                sb.append("  ").append(id).append(" [").append(def.getType()).append("]\n"));
+                sb.append("  ").append(id)
+                  .append(" [pages=").append(def.getPageCount()).append("]\n"));
         ctx.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
         return all.size();
     }
