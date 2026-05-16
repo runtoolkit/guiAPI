@@ -3,7 +3,6 @@ package dev.toolkitmc.guiapi.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
-import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import dev.toolkitmc.guiapi.gui.BarrelGuiHandler;
 import dev.toolkitmc.guiapi.gui.GuiDefinition;
 import dev.toolkitmc.guiapi.gui.OpenDialogPayload;
@@ -34,15 +33,29 @@ public class GuiCommand {
             CommandManager.literal("guiapi")
                 .requires(src -> src.hasPermissionLevel(2))
 
-                // /guiapi open <id>  — opens for command executor
+                // /guiapi open <id>  — opens for self (player only)
                 .then(CommandManager.literal("open")
                     .then(CommandManager.argument("id", StringArgumentType.string())
-                        .suggests((ctx, builder) -> suggestGuiIds(builder))
+                        .suggests((ctx, builder) -> {
+                            String input = builder.getRemainingLowerCase();
+                            GuiRegistry.INSTANCE.getAll().keySet().stream()
+                                    .map(Identifier::toString)
+                                    .filter(s -> s.contains(input))
+                                    .forEach(builder::suggest);
+                            return builder.buildFuture();
+                        })
 
-                        // /guiapi open <id>  — for self
-                        .executes(ctx -> openGui(ctx,
-                                List.of(ctx.getSource().getPlayerOrThrow()),
-                                StringArgumentType.getString(ctx, "id")))
+                        // /guiapi open <id>  — self
+                        .executes(ctx -> {
+                            ServerCommandSource src = ctx.getSource();
+                            ServerPlayerEntity player = src.getPlayer();
+                            if (player == null) {
+                                src.sendError(Text.literal("[GuiAPI] Must be run by a player, or specify <targets>."));
+                                return 0;
+                            }
+                            return openGui(ctx, List.of(player),
+                                    StringArgumentType.getString(ctx, "id"));
+                        })
 
                         // /guiapi open <id> <targets>
                         .then(CommandManager.argument("targets", EntityArgumentType.players())
@@ -52,7 +65,7 @@ public class GuiCommand {
                     )
                 )
 
-                // /guiapi list — show loaded GUIs
+                // /guiapi list
                 .then(CommandManager.literal("list")
                     .executes(GuiCommand::listGuis))
         );
@@ -101,17 +114,5 @@ public class GuiCommand {
                 sb.append("  ").append(id).append(" [").append(def.getType()).append("]\n"));
         ctx.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
         return all.size();
-    }
-
-    // ── Suggestions ───────────────────────────────────────────────────────────
-
-    private static java.util.concurrent.CompletableFuture<com.mojang.brigadier.suggestion.Suggestions>
-            suggestGuiIds(SuggestionsBuilder builder) {
-        String input = builder.getRemainingLowerCase();
-        GuiRegistry.INSTANCE.getAll().keySet().stream()
-                .map(Identifier::toString)
-                .filter(s -> s.contains(input))
-                .forEach(builder::suggest);
-        return builder.buildFuture();
     }
 }
