@@ -70,7 +70,8 @@ public class DialogScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
+        // Draw dim overlay manually instead of renderBackground (avoids blur in 1.21.1)
+        context.fill(0, 0, width, height, 0x88000000);
 
         // Panel background
         context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xCC000000);
