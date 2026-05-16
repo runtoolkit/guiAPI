@@ -1,7 +1,6 @@
 package dev.toolkitmc.guiapi.command;
 
 import com.mojang.brigadier.CommandDispatcher;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.toolkitmc.guiapi.gui.BarrelGuiHandler;
 import dev.toolkitmc.guiapi.gui.GuiDefinition;
@@ -9,6 +8,7 @@ import dev.toolkitmc.guiapi.gui.OpenDialogPayload;
 import dev.toolkitmc.guiapi.loader.GuiRegistry;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.command.argument.EntityArgumentType;
+import net.minecraft.command.argument.IdentifierArgumentType;
 import net.minecraft.server.command.CommandManager;
 import net.minecraft.server.command.ServerCommandSource;
 import net.minecraft.server.network.ServerPlayerEntity;
@@ -19,11 +19,10 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Registers:
- *   /guiapi open <namespace:id> [<targets>]
- *   /guiapi list
+ * /guiapi open <namespace:id> [<targets>]
+ * /guiapi list
  *
- * Permission level 2 (OPs) required.
+ * Permission level 2 required.
  */
 public class GuiCommand {
 
@@ -33,9 +32,8 @@ public class GuiCommand {
             CommandManager.literal("guiapi")
                 .requires(src -> src.hasPermissionLevel(2))
 
-                // /guiapi open <id>  — opens for self (player only)
                 .then(CommandManager.literal("open")
-                    .then(CommandManager.argument("id", StringArgumentType.string())
+                    .then(CommandManager.argument("id", IdentifierArgumentType.identifier())
                         .suggests((ctx, builder) -> {
                             String input = builder.getRemainingLowerCase();
                             GuiRegistry.INSTANCE.getAll().keySet().stream()
@@ -47,40 +45,30 @@ public class GuiCommand {
 
                         // /guiapi open <id>  — self
                         .executes(ctx -> {
-                            ServerCommandSource src = ctx.getSource();
-                            ServerPlayerEntity player = src.getPlayer();
+                            ServerPlayerEntity player = ctx.getSource().getPlayer();
                             if (player == null) {
-                                src.sendError(Text.literal("[GuiAPI] Must be run by a player, or specify <targets>."));
+                                ctx.getSource().sendError(
+                                    Text.literal("[GuiAPI] Must be a player, or specify <targets>."));
                                 return 0;
                             }
-                            return openGui(ctx, List.of(player),
-                                    StringArgumentType.getString(ctx, "id"));
+                            return openGui(ctx, List.of(player));
                         })
 
                         // /guiapi open <id> <targets>
                         .then(CommandManager.argument("targets", EntityArgumentType.players())
                             .executes(ctx -> openGui(ctx,
-                                    EntityArgumentType.getPlayers(ctx, "targets"),
-                                    StringArgumentType.getString(ctx, "id"))))
+                                    EntityArgumentType.getPlayers(ctx, "targets"))))
                     )
                 )
 
-                // /guiapi list
                 .then(CommandManager.literal("list")
                     .executes(GuiCommand::listGuis))
         );
     }
 
-    // ── Handlers ─────────────────────────────────────────────────────────────
-
     private static int openGui(CommandContext<ServerCommandSource> ctx,
-                               Collection<ServerPlayerEntity> targets,
-                               String rawId) {
-        Identifier id = Identifier.tryParse(rawId);
-        if (id == null) {
-            ctx.getSource().sendError(Text.literal("[GuiAPI] Invalid identifier: " + rawId));
-            return 0;
-        }
+                               Collection<ServerPlayerEntity> targets) {
+        Identifier id = IdentifierArgumentType.getIdentifier(ctx, "id");
 
         GuiDefinition def = GuiRegistry.INSTANCE.get(id).orElse(null);
         if (def == null) {
@@ -91,15 +79,13 @@ public class GuiCommand {
         for (ServerPlayerEntity player : targets) {
             switch (def.getType()) {
                 case BARREL -> BarrelGuiHandler.open(player, def);
-                case DIALOG -> ServerPlayNetworking.send(player,
-                        new OpenDialogPayload(def.getId()));
+                case DIALOG -> ServerPlayNetworking.send(player, new OpenDialogPayload(def.getId()));
             }
         }
 
         ctx.getSource().sendFeedback(
                 () -> Text.literal("[GuiAPI] Opened '" + id + "' for " + targets.size() + " player(s)."),
-                false
-        );
+                false);
         return targets.size();
     }
 
