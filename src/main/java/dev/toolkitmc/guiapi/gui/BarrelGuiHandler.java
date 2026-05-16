@@ -84,19 +84,34 @@ public class BarrelGuiHandler {
     }
 
     public static boolean handleClick(ServerPlayerEntity player, GuiDefinition def,
-                                      int page, int slot, SlotActionType actionType) {
-        // Only PICKUP (left/right click) triggers button actions.
-        // All other action types (QUICK_MOVE, THROW, CLONE, etc.) are consumed silently
-        // to prevent any item manipulation inside the GUI inventory.
-        if (actionType != SlotActionType.PICKUP) return true;
+                                      int page, int slot, int mouseButton, SlotActionType actionType) {
+        // Resolve what kind of click this actually is.
+        // mouseButton: 0 = left, 1 = right (Minecraft protocol)
+        // actionType QUICK_MOVE = shift+click
+        final boolean isShift = actionType == SlotActionType.QUICK_MOVE;
+        final boolean isLeft  = !isShift && mouseButton == 0 && actionType == SlotActionType.PICKUP;
+        final boolean isRight = !isShift && mouseButton == 1 && actionType == SlotActionType.PICKUP;
+
+        // Consume every action type to block item manipulation.
+        // Only PICKUP and QUICK_MOVE can actually trigger button actions.
+        if (!isLeft && !isRight && !isShift) return true;
 
         for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() != slot) continue;
-            if (!evaluateCondition(player, btn)) continue; // invisible button, ignore
+            if (!evaluateCondition(player, btn)) continue;
+
+            // Check click_type filter
+            boolean matches = switch (btn.clickType()) {
+                case LEFT  -> isLeft;
+                case RIGHT -> isRight;
+                case SHIFT -> isShift;
+                case ANY   -> isLeft || isRight || isShift;
+            };
+            if (!matches) continue;
 
             for (GuiDefinition.ButtonAction action : btn.actions()) {
                 boolean shouldBreak = executeAction(player, def, page, action);
-                if (shouldBreak) break; // close/open_gui terminates chain
+                if (shouldBreak) break;
             }
             return true;
         }

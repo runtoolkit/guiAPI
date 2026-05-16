@@ -19,6 +19,8 @@ import java.util.List;
 /**
  * /guiapi open <namespace:id> [<targets>]
  * /guiapi list
+ * /guiapi reload
+ * /guiapi help
  *
  * Permission level 2 required.
  */
@@ -58,8 +60,16 @@ public class GuiCommand {
 
                 .then(CommandManager.literal("list")
                     .executes(GuiCommand::listGuis))
+
+                .then(CommandManager.literal("reload")
+                    .executes(GuiCommand::reloadGuis))
+
+                .then(CommandManager.literal("help")
+                    .executes(GuiCommand::showHelp))
         );
     }
+
+    // ── Subcommand handlers ──────────────────────────────────────────────────
 
     private static int openGui(CommandContext<ServerCommandSource> ctx,
                                Collection<ServerPlayerEntity> targets) {
@@ -90,8 +100,44 @@ public class GuiCommand {
         StringBuilder sb = new StringBuilder("[GuiAPI] Loaded GUIs (" + all.size() + "):\n");
         all.forEach((id, def) ->
                 sb.append("  ").append(id)
-                  .append(" [pages=").append(def.getPageCount()).append("]\n"));
+                  .append(" [rows=").append(def.getRows())
+                  .append(", pages=").append(def.getPageCount()).append("]\n"));
         ctx.getSource().sendFeedback(() -> Text.literal(sb.toString().trim()), false);
         return all.size();
+    }
+
+    private static int reloadGuis(CommandContext<ServerCommandSource> ctx) {
+        // Delegates to the server's full resource reload so GuiRegistry.apply()
+        // fires through the normal Fabric reload pipeline — same as /reload.
+        ctx.getSource().getServer()
+                .reloadResources(ctx.getSource().getServer().getDataPackManager().getEnabledIds())
+                .thenRun(() -> ctx.getSource().sendFeedback(
+                        () -> Text.literal("[GuiAPI] Reload complete. " +
+                                GuiRegistry.INSTANCE.getAll().size() + " GUI(s) loaded."),
+                        true))
+                .exceptionally(ex -> {
+                    ctx.getSource().sendError(
+                            Text.literal("[GuiAPI] Reload failed: " + ex.getMessage()));
+                    return null;
+                });
+        return 1;
+    }
+
+    private static int showHelp(CommandContext<ServerCommandSource> ctx) {
+        String help =
+                "[GuiAPI] Commands (permission level 2):\n" +
+                "  /guiapi open <id> [targets] - Open a GUI for yourself or target players\n" +
+                "  /guiapi list               - List all loaded GUI definitions\n" +
+                "  /guiapi reload             - Reload all datapack resources (including GUIs)\n" +
+                "  /guiapi help               - Show this help message\n" +
+                "\n" +
+                "Button JSON fields:\n" +
+                "  slot, page, item, name, lore, glint\n" +
+                "  click_type: any | left | right | shift  (default: any)\n" +
+                "  condition:  has_tag | score_gt | score_lt | score_eq\n" +
+                "  actions:    run_command | close | open_gui | message\n" +
+                "              next_page | prev_page | goto_page";
+        ctx.getSource().sendFeedback(() -> Text.literal(help), false);
+        return 1;
     }
 }

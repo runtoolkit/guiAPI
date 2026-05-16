@@ -24,13 +24,16 @@ public class GuiScreenHandler extends GenericContainerScreenHandler {
 
     @Override
     public void onSlotClick(int slotIndex, int button, SlotActionType actionType, PlayerEntity player) {
-        if (slotIndex >= 0 && slotIndex < definition.getRows() * 9) {
+        // `getRows()` is from GenericContainerScreenHandler — always matches
+        // the actual inventory size, regardless of what GuiDefinition.getRows() returns.
+        int guiSlotCount = getRows() * 9;
+        if (slotIndex >= 0 && slotIndex < guiSlotCount) {
             if (player instanceof ServerPlayerEntity sp) {
-                BarrelGuiHandler.handleClick(sp, definition, page, slotIndex, actionType);
+                BarrelGuiHandler.handleClick(sp, definition, page, slotIndex, button, actionType);
             }
-            return; // consume, don't call super
+            return; // consume; don't call super
         }
-        // Block player inventory clicks too
+        // Block player-inventory clicks (slotIndex >= guiSlotCount) as well — no super call.
     }
 
     @Override
