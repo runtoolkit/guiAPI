@@ -1,7 +1,6 @@
 package dev.toolkitmc.guiapi.screen;
 
 import dev.toolkitmc.guiapi.gui.GuiDefinition;
-import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
@@ -12,15 +11,10 @@ import net.minecraft.text.Text;
  *
  * Layout:
  *   ┌──────────────────────────┐
- *   │         TITLE            │  (centered, top padding)
- *   │                          │
- *   │       body text          │  (word-wrapped)
- *   │                          │
- *   │  [Action1]  [Action2]    │  (bottom, centered)
+ *   │         TITLE            │
+ *   │       body text          │
+ *   │  [Action1]  [Action2]    │
  *   └──────────────────────────┘
- *
- * Action execution sends a command packet to the server rather than executing
- * directly, so server-side permission checks still apply.
  */
 public class DialogScreen extends Screen {
 
@@ -33,7 +27,6 @@ public class DialogScreen extends Screen {
 
     private final GuiDefinition definition;
 
-    // Panel top-left, computed in init()
     private int panelX;
     private int panelY;
 
@@ -51,8 +44,7 @@ public class DialogScreen extends Screen {
 
         var actions = definition.getDialogActions();
         if (actions.isEmpty()) {
-            // Default close button if datapack defined no actions
-            addDrawableChild(ButtonWidget.builder(Text.literal("OK"), btn -> close())
+            addDrawableChild(ButtonWidget.builder(Text.literal("OK"), btn -> closeScreen())
                     .dimensions(panelX + (PANEL_WIDTH - BUTTON_W) / 2,
                                 panelY + PANEL_HEIGHT - PADDING - BUTTON_H,
                                 BUTTON_W, BUTTON_H)
@@ -78,18 +70,17 @@ public class DialogScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        // Dim background
         renderBackground(context, mouseX, mouseY, delta);
 
-        // Panel background (dark translucent)
+        // Panel background
         context.fill(panelX, panelY, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, 0xCC000000);
 
         // Border
-        int borderColor = 0xFF555555;
-        context.fill(panelX,                      panelY,                       panelX + PANEL_WIDTH, panelY + 1,             borderColor);
-        context.fill(panelX,                      panelY + PANEL_HEIGHT - 1,    panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT,  borderColor);
-        context.fill(panelX,                      panelY,                       panelX + 1,           panelY + PANEL_HEIGHT,  borderColor);
-        context.fill(panelX + PANEL_WIDTH - 1,    panelY,                       panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT,  borderColor);
+        int border = 0xFF555555;
+        context.fill(panelX,                   panelY,                    panelX + PANEL_WIDTH, panelY + 1,            border);
+        context.fill(panelX,                   panelY + PANEL_HEIGHT - 1, panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, border);
+        context.fill(panelX,                   panelY,                    panelX + 1,           panelY + PANEL_HEIGHT, border);
+        context.fill(panelX + PANEL_WIDTH - 1, panelY,                    panelX + PANEL_WIDTH, panelY + PANEL_HEIGHT, border);
 
         // Title
         int titleX = panelX + PANEL_WIDTH / 2;
@@ -98,16 +89,15 @@ public class DialogScreen extends Screen {
                 Text.literal(definition.getTitle()).styled(s -> s.withBold(true)),
                 titleX, titleY, 0xFFFFFF);
 
-        // Separator line under title
+        // Separator
         int sepY = titleY + textRenderer.fontHeight + 4;
         context.fill(panelX + PADDING, sepY, panelX + PANEL_WIDTH - PADDING, sepY + 1, 0xFF888888);
 
-        // Body text — word-wrapped
+        // Body text
         int bodyY = sepY + 8;
         int maxWidth = PANEL_WIDTH - PADDING * 2;
         for (var line : textRenderer.wrapLines(Text.literal(definition.getBody()), maxWidth)) {
-            context.drawTextWithShadow(textRenderer, line,
-                    panelX + PADDING, bodyY, 0xCCCCCC);
+            context.drawTextWithShadow(textRenderer, line, panelX + PADDING, bodyY, 0xCCCCCC);
             bodyY += textRenderer.fontHeight + 2;
         }
 
@@ -116,42 +106,39 @@ public class DialogScreen extends Screen {
 
     @Override
     public boolean shouldPause() {
-        // Don't pause single-player — consistent with chat/inventory behavior
         return false;
     }
 
-    // ── Action execution ─────────────────────────────────────────────────────
+    // ── Action execution ──────────────────────────────────────────────────────
 
     private void executeDialogAction(GuiDefinition.DialogAction action) {
         switch (action.type()) {
             case RUN_COMMAND -> {
-                close();
-                // Send command via chat packet (client→server)
-                String cmd = action.value().startsWith("/")
-                        ? action.value()
-                        : "/" + action.value();
+                closeScreen();
                 if (client != null && client.player != null) {
-                    client.player.networkHandler.sendChatCommand(cmd.substring(1));
+                    String cmd = action.value().startsWith("/")
+                            ? action.value().substring(1)
+                            : action.value();
+                    client.player.networkHandler.sendChatCommand(cmd);
                 }
             }
-            case CLOSE -> close();
+            case CLOSE -> closeScreen();
             case MESSAGE -> {
                 if (client != null && client.player != null) {
-                    client.player.sendMessage(Text.literal(action.value()), true); // actionbar
+                    client.player.sendMessage(Text.literal(action.value()), true);
                 }
             }
             case OPEN_GUI -> {
-                // Send open request back to server via chat command
-                close();
+                closeScreen();
                 if (client != null && client.player != null) {
                     client.player.networkHandler.sendChatCommand(
-                            "guiapi open " + action.value() + " @s");
+                            "guiapi open " + action.value());
                 }
             }
         }
     }
 
-    private void close() {
+    private void closeScreen() {
         if (client != null) client.setScreen(null);
     }
 }
