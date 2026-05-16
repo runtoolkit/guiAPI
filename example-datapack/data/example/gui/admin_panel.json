@@ -1,5 +1,4 @@
 {
-  "type": "barrel",
   "title": "§6Admin Panel",
   "rows": 3,
   "buttons": [
@@ -8,40 +7,61 @@
       "item": "minecraft:book",
       "name": "§aRules",
       "lore": ["§7Click to see the server rules."],
-      "action": {
-        "type": "message",
-        "value": "§6Rules: §fBe respectful. No griefing. No cheating."
-      }
+      "actions": [
+        { "type": "message", "value": "§6Rules: §fBe respectful. No griefing. No cheating." }
+      ]
     },
     {
       "slot": 12,
       "item": "minecraft:compass",
       "name": "§bSpawn",
-      "lore": ["§7Teleport to spawn."],
-      "action": {
-        "type": "run_command",
-        "value": "/tp @s 0 64 0"
-      }
+      "lore": ["§7Teleport to spawn.", "§8Left-click only."],
+      "click_type": "left",
+      "actions": [
+        { "type": "run_command", "value": "tp @s 0 64 0" },
+        { "type": "close" }
+      ]
+    },
+    {
+      "slot": 12,
+      "item": "minecraft:compass",
+      "name": "§bSpawn",
+      "lore": ["§7See your coordinates.", "§8Right-click only."],
+      "click_type": "right",
+      "actions": [
+        { "type": "run_command", "value": "execute as @s run data get entity @s Pos" }
+      ]
     },
     {
       "slot": 14,
       "item": "minecraft:ender_pearl",
       "name": "§dMore Options",
       "lore": ["§7Open the second menu."],
-      "action": {
-        "type": "open_gui",
-        "value": "example:sub_menu"
-      }
+      "actions": [
+        { "type": "open_gui", "value": "example:sub_menu" }
+      ]
+    },
+    {
+      "slot": 15,
+      "item": "minecraft:nether_star",
+      "name": "§cAdmin Tools",
+      "lore": ["§7Only visible with the §cadmin§7 tag.", "§8Shift-click to open."],
+      "glint": true,
+      "click_type": "shift",
+      "condition": { "type": "has_tag", "value": "admin" },
+      "actions": [
+        { "type": "run_command", "value": "gamemode creative @s", "run_with": "console" },
+        { "type": "close" }
+      ]
     },
     {
       "slot": 16,
       "item": "minecraft:barrier",
       "name": "§cClose",
       "lore": [],
-      "action": {
-        "type": "close",
-        "value": ""
-      }
+      "actions": [
+        { "type": "close" }
+      ]
     }
   ]
 }
