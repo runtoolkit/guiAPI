@@ -1,0 +1,17 @@
+{
+  "type": "dialog",
+  "title": "§6Welcome!",
+  "body": "Welcome to the server!\n\nPlease read the rules before playing. Have fun and enjoy your stay.",
+  "actions": [
+    {
+      "label": "§aAccept",
+      "type": "run_command",
+      "value": "/say I accepted the rules!"
+    },
+    {
+      "label": "§cDecline",
+      "type": "close",
+      "value": ""
+    }
+  ]
+}

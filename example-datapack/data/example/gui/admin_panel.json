@@ -1,0 +1,47 @@
+{
+  "type": "barrel",
+  "title": "§6Admin Panel",
+  "rows": 3,
+  "buttons": [
+    {
+      "slot": 10,
+      "item": "minecraft:book",
+      "name": "§aRules",
+      "lore": ["§7Click to see the server rules."],
+      "action": {
+        "type": "message",
+        "value": "§6Rules: §fBe respectful. No griefing. No cheating."
+      }
+    },
+    {
+      "slot": 12,
+      "item": "minecraft:compass",
+      "name": "§bSpawn",
+      "lore": ["§7Teleport to spawn."],
+      "action": {
+        "type": "run_command",
+        "value": "/tp @s 0 64 0"
+      }
+    },
+    {
+      "slot": 14,
+      "item": "minecraft:ender_pearl",
+      "name": "§dMore Options",
+      "lore": ["§7Open the second menu."],
+      "action": {
+        "type": "open_gui",
+        "value": "example:sub_menu"
+      }
+    },
+    {
+      "slot": 16,
+      "item": "minecraft:barrier",
+      "name": "§cClose",
+      "lore": [],
+      "action": {
+        "type": "close",
+        "value": ""
+      }
+    }
+  ]
+}

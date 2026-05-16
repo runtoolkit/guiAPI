@@ -1,0 +1,65 @@
+plugins {
+    id 'fabric-loom' version '1.7-SNAPSHOT'
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    maven { url = "https://maven.fabricmc.net/" }
+}
+
+loom {
+    splitEnvironmentSourceSets()
+
+    mods {
+        guiapi {
+            sourceSet sourceSets.main
+            sourceSet sourceSets.client
+        }
+    }
+}
+
+dependencies {
+    // Minecraft + mappings
+    minecraft "com.mojang:minecraft:1.21.1"
+    mappings "net.fabricmc:yarn:1.21.1+build.3:v2"
+
+    // Fabric Loader
+    modImplementation "net.fabricmc:fabric-loader:0.16.5"
+
+    // Fabric API
+    modImplementation "net.fabricmc.fabric-api:fabric-api:0.104.0+1.21.1"
+
+    // Gson (bundled with Minecraft, just declare for IDE)
+    // compileOnly 'com.google.code.gson:gson:2.10.1'
+}
+
+processResources {
+    inputs.property "version", project.version
+
+    filesMatching("fabric.mod.json") {
+        expand "version": project.version
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    it.options.release = 21
+}
+
+java {
+    withSourcesJar()
+    sourceCompatibility = JavaVersion.VERSION_21
+    targetCompatibility = JavaVersion.VERSION_21
+}
+
+jar {
+    from("LICENSE") {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}

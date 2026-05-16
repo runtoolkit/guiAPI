@@ -1,0 +1,37 @@
+{
+  "type": "barrel",
+  "title": "§dMore Options",
+  "rows": 1,
+  "buttons": [
+    {
+      "slot": 2,
+      "item": "minecraft:clock",
+      "name": "§eSet Day",
+      "lore": ["§7Set time to day."],
+      "action": {
+        "type": "run_command",
+        "value": "/time set day"
+      }
+    },
+    {
+      "slot": 4,
+      "item": "minecraft:sunflower",
+      "name": "§aClear Weather",
+      "lore": ["§7Set weather to clear."],
+      "action": {
+        "type": "run_command",
+        "value": "/weather clear"
+      }
+    },
+    {
+      "slot": 6,
+      "item": "minecraft:arrow",
+      "name": "§7Back",
+      "lore": ["§7Return to admin panel."],
+      "action": {
+        "type": "open_gui",
+        "value": "example:admin_panel"
+      }
+    }
+  ]
+}
