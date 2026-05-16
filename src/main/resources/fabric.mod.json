@@ -13,9 +13,11 @@
     }
   ],
   "contact": {
+    "issues": "https://github.com/ToolkitMC/guiAPI/issues",
     "sources": "https://github.com/runtoolkit/guiAPI"
   },
   "license": "MIT",
+  "icon": "icon.png",
   "environment": "*",
   "entrypoints": {
     "main": [
