@@ -29,6 +29,11 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
+      - name: Publish guiAPI to mavenLocal
+        run: |
+          chmod +x gradlew
+          ./gradlew clean publishToMavenLocal --no-daemon
+
       - name: Publish guiAPI-advancement to mavenLocal
         run: |
           git clone --depth 1 https://github.com/ToolkitMC/guiAPI-advancement.git /tmp/guiAPI-advancement
