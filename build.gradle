@@ -40,8 +40,6 @@ dependencies {
     // Mod Menu (optional)
     modCompileOnly "maven.modrinth:modmenu:11.0.3"
 
-    // guiAPI dependency
-    modImplementation "dev.toolkitmc:guiapi:1.0.2"
 }
 
 processResources {
