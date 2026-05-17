@@ -148,9 +148,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
             // Toggle button — shows ON/OFF, cycles on click
             ButtonWidget[] ref = new ButtonWidget[1];
             ref[0] = ButtonWidget.builder(toggleText(initial), btn -> {
-                boolean next = btn.getMessage().getString().contains("ON") ? false : true;
-                // Invert: if currently showing ON, clicking turns it OFF
-                next = !btn.getMessage().getString().contains("ON");
+                boolean next = !btn.getMessage().getString().contains("ON");
                 onChange.accept(next);
                 btn.setMessage(toggleText(next));
             }).dimensions(cx + 60, y, 40, 20).build();

@@ -24,7 +24,6 @@ import net.minecraft.server.network.ServerPlayerEntity;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -45,7 +44,8 @@ import java.util.UUID;
 public class BarrelGuiHandler {
 
     /** Player UUID → currently open GUI state */
-    private static final Map<UUID, OpenState> OPEN_GUIS = new HashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<UUID, OpenState> OPEN_GUIS =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private record OpenState(GuiDefinition def, int page) {}
 
@@ -82,9 +82,10 @@ public class BarrelGuiHandler {
             }
         });
 
-        // Fire on_open actions after the screen is sent
+        // Fire on_open actions — stop if a navigation/close action fires
         for (GuiDefinition.ButtonAction action : def.getOnOpen()) {
-            executeAction(player, def, page, action);
+            boolean stop = executeAction(player, def, page, action);
+            if (stop) break;
         }
     }
 
@@ -150,10 +151,11 @@ public class BarrelGuiHandler {
     }
 
     public static void onClose(UUID playerUuid) {
-        OpenState state = OPEN_GUIS.remove(playerUuid);
-        // on_close hooks — need the server player from somewhere; we don't have it here.
-        // Handled in GuiScreenHandler.onClosed() which passes the player directly.
-        // This overload is kept for callers that only have the UUID.
+        // UUID-only overload: fires when we don't have a ServerPlayerEntity reference.
+        // Cannot run on_close actions (no player object) but MUST clear vars to avoid leak.
+        if (OPEN_GUIS.remove(playerUuid) != null) {
+            GuiVarStore.INSTANCE.clear(playerUuid);
+        }
     }
 
     /**
@@ -305,12 +307,12 @@ public class BarrelGuiHandler {
         return switch (cond.type()) {
             case HAS_TAG  -> player.getCommandTags().contains(cond.value());
             case NOT_TAG  -> !player.getCommandTags().contains(cond.value());
-            case SCORE_GT -> getScore(player, cond.value().split(":"), 0) >
-                             parseCondInt(cond.value().split(":"), 1);
-            case SCORE_LT -> getScore(player, cond.value().split(":"), 0) <
-                             parseCondInt(cond.value().split(":"), 1);
-            case SCORE_EQ -> getScore(player, cond.value().split(":"), 0) ==
-                             parseCondInt(cond.value().split(":"), 1);
+            case SCORE_GT -> getScore(player, cond.value().split(":", 2), 0) >
+                             parseCondInt(cond.value().split(":", 2), 1);
+            case SCORE_LT -> getScore(player, cond.value().split(":", 2), 0) <
+                             parseCondInt(cond.value().split(":", 2), 1);
+            case SCORE_EQ -> getScore(player, cond.value().split(":", 2), 0) ==
+                             parseCondInt(cond.value().split(":", 2), 1);
             // var conditions — value format: "varKey:compareValue"
             case VAR_EQ   -> {
                 String[] p = cond.value().split(":", 2);
