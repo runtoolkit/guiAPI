@@ -11,33 +11,55 @@ base {
 }
 
 repositories {
-    maven { url = "https://maven.fabricmc.net/" }
-    maven { url = "https://api.modrinth.com/maven" }
+    // Local Maven repository
+    mavenLocal()
+
+    // Fabric
+    maven {
+        url = "https://maven.fabricmc.net/"
+    }
+
+    // Modrinth
+    maven {
+        url = "https://api.modrinth.com/maven"
+    }
+
+    // Maven Central
+    mavenCentral()
 }
 
 dependencies {
+    // Minecraft
     minecraft "com.mojang:minecraft:1.21.1"
+
+    // Yarn mappings
     mappings "net.fabricmc:yarn:1.21.1+build.3:v2"
+
+    // Fabric Loader
     modImplementation "net.fabricmc:fabric-loader:0.16.5"
+
+    // Fabric API
     modImplementation "net.fabricmc.fabric-api:fabric-api:0.116.12+1.21.1"
 
-    // Mod Menu — optional. Compile-only so the jar doesn't require it at runtime.
+    // Mod Menu (optional)
     modCompileOnly "maven.modrinth:modmenu:11.0.3"
 }
 
 processResources {
     inputs.property "version", project.version
+
     filesMatching("fabric.mod.json") {
         expand "version": project.version
     }
 }
 
 tasks.withType(JavaCompile).configureEach {
-    it.options.release = 21
+    options.release = 21
 }
 
 java {
     withSourcesJar()
+
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
 }
@@ -45,5 +67,21 @@ java {
 jar {
     from("LICENSE") {
         rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+
+            groupId = project.maven_group
+            artifactId = project.archives_base_name
+            version = project.mod_version
+        }
+    }
+
+    repositories {
+        mavenLocal()
     }
 }
