@@ -6,15 +6,15 @@
   "description": "Datapack-driven chest GUI system for Minecraft 1.21.1.",
   "authors": [
     {
-      "name": "IronCrest",
+      "name": "ToolkitMC",
       "contact": {
-        "sources": "https://github.com/asn44nb"
+        "sources": "https://github.com/ToolkitMC"
       }
     }
   ],
   "contact": {
     "issues": "https://github.com/ToolkitMC/guiAPI/issues",
-    "sources": "https://github.com/runtoolkit/guiAPI"
+    "sources": "https://github.com/ToolkitMC/guiAPI"
   },
   "license": "MIT",
   "icon": "icon.png",
