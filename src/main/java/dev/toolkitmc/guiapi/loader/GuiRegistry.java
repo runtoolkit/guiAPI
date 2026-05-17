@@ -32,6 +32,9 @@ public class GuiRegistry extends SinglePreparationResourceReloader<Map<Identifie
 
     private final Map<Identifier, GuiDefinition> definitions = new HashMap<>();
 
+    /** Addon-registered GUIs — survive datapack reloads. */
+    private final Map<Identifier, GuiDefinition> addonDefinitions = new HashMap<>();
+
     private GuiRegistry() {}
 
     @Override
@@ -82,7 +85,11 @@ public class GuiRegistry extends SinglePreparationResourceReloader<Map<Identifie
     protected void apply(Map<Identifier, GuiDefinition> prepared, ResourceManager manager, Profiler profiler) {
         definitions.clear();
         definitions.putAll(prepared);
-        GuiApiMod.LOGGER.info("[GuiAPI] Registered {} GUI definitions.", definitions.size());
+        // Addon GUIs are re-applied after every reload so they are never wiped.
+        // Datapack entries take priority if the same ID exists in both.
+        addonDefinitions.forEach(definitions::putIfAbsent);
+        GuiApiMod.LOGGER.info("[GuiAPI] Registered {} GUI definitions ({} from addons).",
+                definitions.size(), addonDefinitions.size());
     }
 
     // ── Public API ───────────────────────────────────────────────────────────
@@ -93,5 +100,39 @@ public class GuiRegistry extends SinglePreparationResourceReloader<Map<Identifie
 
     public Map<Identifier, GuiDefinition> getAll() {
         return Map.copyOf(definitions);
+    }
+
+    /**
+     * Addon API — register a GUI definition from Java code (e.g. another Fabric mod).
+     * Addon registrations survive a datapack reload; they are re-applied after every
+     * {@link #apply} call so they are never wiped by {@code /reload} or {@code /guiapi reload}.
+     *
+     * <p>Call this from your mod's {@code onInitialize()} or from a
+     * {@link net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents#SERVER_STARTED}
+     * callback.
+     *
+     * @param definition The GUI to register.
+     * @throws IllegalArgumentException if a GUI with the same ID is already registered
+     *                                  by another addon (datapack GUIs are always overrideable).
+     */
+    public void registerAddon(GuiDefinition definition) {
+        Identifier id = definition.getId();
+        if (addonDefinitions.containsKey(id)) {
+            throw new IllegalArgumentException("[GuiAPI] Addon GUI already registered: " + id);
+        }
+        addonDefinitions.put(id, definition);
+        definitions.put(id, definition);
+        GuiApiMod.LOGGER.info("[GuiAPI] Addon registered GUI: {}", id);
+    }
+
+    /**
+     * Addon API — unregister a previously registered addon GUI.
+     * No-op if the ID was never registered as an addon.
+     */
+    public void unregisterAddon(Identifier id) {
+        if (addonDefinitions.remove(id) != null) {
+            definitions.remove(id);
+            GuiApiMod.LOGGER.info("[GuiAPI] Addon unregistered GUI: {}", id);
+        }
     }
 }

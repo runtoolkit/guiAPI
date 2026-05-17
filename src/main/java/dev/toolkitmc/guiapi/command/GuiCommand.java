@@ -66,6 +66,9 @@ public class GuiCommand {
                 .then(CommandManager.literal("list")
                     .executes(GuiCommand::listGuis))
 
+                .then(CommandManager.literal("reload")
+                    .executes(GuiCommand::reloadGuis))
+
                 .then(CommandManager.literal("help")
                     .executes(GuiCommand::showHelp))
 

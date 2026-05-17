@@ -117,9 +117,20 @@ public class GuiApiModMenuEntry implements ModMenuApi {
                 MinecraftClient.getInstance().setScreen(parent);
             }).dimensions(cx - 105, height - 30, 100, 20).build());
 
+            addDrawableChild(ButtonWidget.builder(Text.literal("Reload GUIs"), btn -> {
+                var client = MinecraftClient.getInstance();
+                if (client.player != null) {
+                    // Send /guiapi reload as a chat command — works in-game only.
+                    client.player.networkHandler.sendChatCommand("guiapi reload");
+                    client.setScreen(parent);
+                } else {
+                    btn.setMessage(Text.literal("§cNot in-game"));
+                }
+            }).dimensions(cx - 0, height - 30, 100, 20).build());
+
             addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"), btn ->
                     MinecraftClient.getInstance().setScreen(parent))
-                    .dimensions(cx + 5, height - 30, 100, 20).build());
+                    .dimensions(cx + 105, height - 30, 100, 20).build());
         }
 
         @Override
