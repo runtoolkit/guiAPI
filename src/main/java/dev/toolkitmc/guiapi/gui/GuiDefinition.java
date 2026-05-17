@@ -15,30 +15,52 @@ import java.util.Optional;
  * {
  *   "title": "My GUI",
  *   "rows": 3,
+ *   "on_open":  [ { "type": "run_command", "value": "..." } ],  // optional
+ *   "on_close": [ { "type": "run_command", "value": "..." } ],  // optional
  *   "buttons": [
  *     {
  *       "slot": 4,
  *       "page": 0,                        // optional, default 0
  *       "item": "minecraft:diamond",
- *       "name": "§bClick Me",
- *       "lore": ["§7Line 1"],
- *       "glint": true,                    // enchantment glint effect
+ *       "name": "§bClick Me",             // supports {player}, {gui}, {page}
+ *       "lore": ["§7Score: {score:coins}"],
+ *       "glint": true,
  *       "click_type": "any",             // any (default) | left | right | shift
- *       "condition": {                    // optional visibility condition
- *         "type": "has_tag",             // has_tag | score_gt | score_lt | score_eq
- *         "value": "my_tag"             // tag name OR "objective:min:max" for score
+ *       "condition": {
+ *         "type": "has_tag",             // has_tag | not_tag | score_gt | score_lt | score_eq
+ *         "value": "my_tag"
  *       },
- *       "actions": [                      // list of actions (executed in order)
- *         {
- *           "type": "run_command",
- *           "value": "/say hi",
- *           "run_with": "player"         // "player" (default) | "console"
- *         },
+ *       "actions": [
+ *         { "type": "run_command", "value": "/say hi", "run_with": "player" },
  *         { "type": "close" }
  *       ]
+ *     },
+ *     {
+ *       "slot": 8,
+ *       "toggle": {
+ *         "tag": "my_toggle_tag",         // scoreboard tag used as toggle state
+ *         "item_on":  "minecraft:lime_dye",
+ *         "item_off": "minecraft:gray_dye",
+ *         "name_on":  "§aEnabled",
+ *         "name_off": "§7Disabled",
+ *         "lore_on":  ["§7Click to disable."],
+ *         "lore_off": ["§7Click to enable."],
+ *         "glint_on":  false,
+ *         "glint_off": false,
+ *         "actions_on":  [ { "type": "run_command", "value": "tag @s remove my_toggle_tag" } ],
+ *         "actions_off": [ { "type": "run_command", "value": "tag @s add my_toggle_tag" } ]
+ *       }
  *     }
  *   ]
  * }
+ *
+ * Placeholders (resolved at render time per-player):
+ *   {player}        — player's display name
+ *   {gui}           — GUI ID (namespace:name)
+ *   {page}          — current page index (0-based)
+ *   {page1}         — current page index (1-based)
+ *   {pages}         — total page count
+ *   {score:obj}     — player's score in objective "obj"
  *
  * Action types:
  *   run_command  — run a command (run_with: player|console)
@@ -50,10 +72,11 @@ import java.util.Optional;
  *   goto_page    — go to specific page (value: page index as string)
  *
  * Condition types:
- *   has_tag      — value: tag name. Button visible only if player has tag.
- *   score_gt     — value: "objective:min". Visible if score > min.
- *   score_lt     — value: "objective:max". Visible if score < max.
- *   score_eq     — value: "objective:val". Visible if score == val.
+ *   has_tag      — value: tag name. Visible if player has tag.
+ *   not_tag      — value: tag name. Visible if player does NOT have tag.
+ *   score_gt     — value: "objective:threshold". Visible if score > threshold.
+ *   score_lt     — value: "objective:threshold". Visible if score < threshold.
+ *   score_eq     — value: "objective:value".     Visible if score == value.
  */
 public class GuiDefinition {
 
@@ -61,10 +84,6 @@ public class GuiDefinition {
 
     /**
      * Which mouse button triggers this button's actions.
-     *   ANY   — left or right click (default, original behaviour)
-     *   LEFT  — only left click
-     *   RIGHT — only right click
-     *   SHIFT — only shift+left click (QUICK_MOVE)
      */
     public enum ClickType {
         ANY, LEFT, RIGHT, SHIFT;
@@ -96,18 +115,20 @@ public class GuiDefinition {
         }
     }
 
-    public enum RunWith { PLAYER, CONSOLE;
+    public enum RunWith {
+        PLAYER, CONSOLE;
         public static RunWith fromString(String s) {
             return "console".equalsIgnoreCase(s) ? CONSOLE : PLAYER;
         }
     }
 
     public enum ConditionType {
-        HAS_TAG, SCORE_GT, SCORE_LT, SCORE_EQ;
+        HAS_TAG, NOT_TAG, SCORE_GT, SCORE_LT, SCORE_EQ;
 
         public static ConditionType fromString(String s) {
             return switch (s.toLowerCase()) {
                 case "has_tag"  -> HAS_TAG;
+                case "not_tag"  -> NOT_TAG;
                 case "score_gt" -> SCORE_GT;
                 case "score_lt" -> SCORE_LT;
                 case "score_eq" -> SCORE_EQ;
@@ -126,6 +147,24 @@ public class GuiDefinition {
 
     public record ButtonCondition(ConditionType type, String value) {}
 
+    /**
+     * Toggle definition — stored on a button instead of a fixed item/actions.
+     * State is tracked via a scoreboard tag on the player.
+     */
+    public record ToggleDefinition(
+            String tag,
+            String itemOn,  String itemOff,
+            String nameOn,  String nameOff,
+            List<String> loreOn, List<String> loreOff,
+            boolean glintOn, boolean glintOff,
+            List<ButtonAction> actionsOn,
+            List<ButtonAction> actionsOff
+    ) {}
+
+    /**
+     * A button in the GUI.
+     * Either {@code toggle} is present (toggle button) or {@code item}/{@code actions} are used.
+     */
     public record Button(
             int slot,
             int page,
@@ -135,7 +174,8 @@ public class GuiDefinition {
             boolean glint,
             ClickType clickType,
             Optional<ButtonCondition> condition,
-            List<ButtonAction> actions
+            List<ButtonAction> actions,
+            Optional<ToggleDefinition> toggle
     ) {}
 
     // ── Fields ───────────────────────────────────────────────────────────────
@@ -145,14 +185,21 @@ public class GuiDefinition {
     private final int rows;
     private final int pageCount;
     private final List<Button> buttons;
+    private final List<ButtonAction> onOpen;
+    private final List<ButtonAction> onClose;
 
     // ── Constructor ──────────────────────────────────────────────────────────
 
-    private GuiDefinition(Identifier id, String title, int rows, List<Button> buttons) {
-        this.id       = id;
-        this.title    = title;
-        this.rows     = rows;
-        this.buttons  = buttons;
+    private GuiDefinition(Identifier id, String title, int rows,
+                          List<Button> buttons,
+                          List<ButtonAction> onOpen,
+                          List<ButtonAction> onClose) {
+        this.id        = id;
+        this.title     = title;
+        this.rows      = rows;
+        this.buttons   = buttons;
+        this.onOpen    = onOpen;
+        this.onClose   = onClose;
         this.pageCount = buttons.stream().mapToInt(Button::page).max().orElse(0) + 1;
     }
 
@@ -169,25 +216,28 @@ public class GuiDefinition {
             }
         }
 
-        return new GuiDefinition(id, title, rows, buttons);
+        List<ButtonAction> onOpen  = parseActionList(obj, "on_open");
+        List<ButtonAction> onClose = parseActionList(obj, "on_close");
+
+        return new GuiDefinition(id, title, rows, buttons, onOpen, onClose);
+    }
+
+    private static List<ButtonAction> parseActionList(JsonObject obj, String key) {
+        List<ButtonAction> list = new ArrayList<>();
+        if (obj.has(key) && obj.get(key).isJsonArray()) {
+            for (JsonElement el : obj.getAsJsonArray(key))
+                list.add(parseAction(el.getAsJsonObject()));
+        }
+        return list;
     }
 
     private static Button parseButton(JsonObject b) {
         int slot  = b.has("slot") ? b.get("slot").getAsInt() : 0;
         int page  = b.has("page") ? Math.max(0, b.get("page").getAsInt()) : 0;
-        String item = b.has("item") ? b.get("item").getAsString() : "minecraft:stone";
-        String name = b.has("name") ? b.get("name").getAsString() : "";
-        boolean glint = b.has("glint") && b.get("glint").getAsBoolean();
 
         ClickType clickType = b.has("click_type")
                 ? ClickType.fromString(b.get("click_type").getAsString())
                 : ClickType.ANY;
-
-        List<String> lore = new ArrayList<>();
-        if (b.has("lore") && b.get("lore").isJsonArray()) {
-            for (JsonElement l : b.getAsJsonArray("lore"))
-                lore.add(l.getAsString());
-        }
 
         Optional<ButtonCondition> condition = Optional.empty();
         if (b.has("condition") && b.get("condition").isJsonObject()) {
@@ -198,25 +248,81 @@ public class GuiDefinition {
             condition = Optional.of(new ButtonCondition(ct, cv));
         }
 
-        List<ButtonAction> actions = new ArrayList<>();
+        // Toggle button — item/name/lore/actions come from the toggle definition
+        if (b.has("toggle") && b.get("toggle").isJsonObject()) {
+            ToggleDefinition toggle = parseToggle(b.getAsJsonObject("toggle"));
+            return new Button(slot, page, "", "", List.of(), false,
+                    clickType, condition, List.of(), Optional.of(toggle));
+        }
 
-        // Support both legacy "action": {} and new "actions": []
+        // Standard button
+        String item  = b.has("item") ? b.get("item").getAsString() : "minecraft:stone";
+        String name  = b.has("name") ? b.get("name").getAsString() : "";
+        boolean glint = b.has("glint") && b.get("glint").getAsBoolean();
+
+        List<String> lore = new ArrayList<>();
+        if (b.has("lore") && b.get("lore").isJsonArray()) {
+            for (JsonElement l : b.getAsJsonArray("lore"))
+                lore.add(l.getAsString());
+        }
+
+        List<ButtonAction> actions = new ArrayList<>();
         if (b.has("actions") && b.get("actions").isJsonArray()) {
             for (JsonElement el : b.getAsJsonArray("actions"))
                 actions.add(parseAction(el.getAsJsonObject()));
         } else if (b.has("action") && b.get("action").isJsonObject()) {
             actions.add(parseAction(b.getAsJsonObject("action")));
         }
-
         if (actions.isEmpty()) actions.add(new ButtonAction(ActionType.CLOSE, ""));
 
-        return new Button(slot, page, item, name, lore, glint, clickType, condition, actions);
+        return new Button(slot, page, item, name, lore, glint, clickType, condition, actions, Optional.empty());
+    }
+
+    private static ToggleDefinition parseToggle(JsonObject t) {
+        String tag      = t.has("tag")       ? t.get("tag").getAsString()       : "";
+        String itemOn   = t.has("item_on")   ? t.get("item_on").getAsString()   : "minecraft:lime_dye";
+        String itemOff  = t.has("item_off")  ? t.get("item_off").getAsString()  : "minecraft:gray_dye";
+        String nameOn   = t.has("name_on")   ? t.get("name_on").getAsString()   : "§aEnabled";
+        String nameOff  = t.has("name_off")  ? t.get("name_off").getAsString()  : "§7Disabled";
+        boolean glintOn  = t.has("glint_on")  && t.get("glint_on").getAsBoolean();
+        boolean glintOff = t.has("glint_off") && t.get("glint_off").getAsBoolean();
+
+        List<String> loreOn  = parseStringList(t, "lore_on");
+        List<String> loreOff = parseStringList(t, "lore_off");
+
+        List<ButtonAction> actionsOn  = new ArrayList<>();
+        List<ButtonAction> actionsOff = new ArrayList<>();
+
+        if (t.has("actions_on") && t.get("actions_on").isJsonArray())
+            for (JsonElement el : t.getAsJsonArray("actions_on"))
+                actionsOn.add(parseAction(el.getAsJsonObject()));
+
+        if (t.has("actions_off") && t.get("actions_off").isJsonArray())
+            for (JsonElement el : t.getAsJsonArray("actions_off"))
+                actionsOff.add(parseAction(el.getAsJsonObject()));
+
+        // Default: toggle the tag
+        if (actionsOn.isEmpty())
+            actionsOn.add(new ButtonAction(ActionType.RUN_COMMAND, "tag @s remove " + tag, RunWith.CONSOLE));
+        if (actionsOff.isEmpty())
+            actionsOff.add(new ButtonAction(ActionType.RUN_COMMAND, "tag @s add " + tag, RunWith.CONSOLE));
+
+        return new ToggleDefinition(tag, itemOn, itemOff, nameOn, nameOff,
+                loreOn, loreOff, glintOn, glintOff, actionsOn, actionsOff);
+    }
+
+    private static List<String> parseStringList(JsonObject obj, String key) {
+        List<String> list = new ArrayList<>();
+        if (obj.has(key) && obj.get(key).isJsonArray())
+            for (JsonElement el : obj.getAsJsonArray(key))
+                list.add(el.getAsString());
+        return list;
     }
 
     private static ButtonAction parseAction(JsonObject a) {
         ActionType type = ActionType.fromString(
                 a.has("type") ? a.get("type").getAsString() : "close");
-        String value   = a.has("value") ? a.get("value").getAsString() : "";
+        String value    = a.has("value") ? a.get("value").getAsString() : "";
         RunWith runWith = a.has("run_with")
                 ? RunWith.fromString(a.get("run_with").getAsString())
                 : RunWith.PLAYER;
@@ -225,12 +331,14 @@ public class GuiDefinition {
 
     // ── Getters ──────────────────────────────────────────────────────────────
 
-    public Identifier getId()        { return id; }
-    public String getTitle()         { return title; }
+    public Identifier getId()              { return id; }
+    public String getTitle()               { return title; }
     /** Always in [1, 6]. */
-    public int getRows()             { return Math.clamp(rows, 1, 6); }
-    public int getPageCount()        { return pageCount; }
-    public List<Button> getButtons() { return buttons; }
+    public int getRows()                   { return Math.clamp(rows, 1, 6); }
+    public int getPageCount()              { return pageCount; }
+    public List<Button> getButtons()       { return buttons; }
+    public List<ButtonAction> getOnOpen()  { return onOpen; }
+    public List<ButtonAction> getOnClose() { return onClose; }
 
     /** Returns only buttons belonging to the given page. */
     public List<Button> getButtonsForPage(int page) {
