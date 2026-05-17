@@ -11,21 +11,17 @@ base {
 }
 
 repositories {
-    // Local Maven repository
     mavenLocal()
 
-    // Fabric
+    mavenCentral()
+
     maven {
         url = "https://maven.fabricmc.net/"
     }
 
-    // Modrinth
     maven {
         url = "https://api.modrinth.com/maven"
     }
-
-    // Maven Central
-    mavenCentral()
 }
 
 dependencies {
@@ -43,13 +39,18 @@ dependencies {
 
     // Mod Menu (optional)
     modCompileOnly "maven.modrinth:modmenu:11.0.3"
+
+    // guiAPI dependency
+    modImplementation "dev.toolkitmc:guiapi:1.0.2"
 }
 
 processResources {
     inputs.property "version", project.version
 
     filesMatching("fabric.mod.json") {
-        expand "version": project.version
+        expand(
+                "version": project.version
+        )
     }
 }
 
@@ -73,11 +74,25 @@ jar {
 publishing {
     publications {
         mavenJava(MavenPublication) {
-            from components.java
 
             groupId = project.maven_group
             artifactId = project.archives_base_name
             version = project.mod_version
+
+            from components.java
+
+            artifact(remapJar) {
+                builtBy remapJar
+            }
+
+            artifact(sourcesJar) {
+                builtBy sourcesJar
+            }
+
+            pom {
+                name = project.archives_base_name
+                description = "guiAPI Fabric library"
+            }
         }
     }
 
