@@ -99,7 +99,8 @@ public class GuiDefinition {
     }
 
     public enum ActionType {
-        RUN_COMMAND, CLOSE, OPEN_GUI, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE, SOUND;
+        RUN_COMMAND, CLOSE, OPEN_GUI, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE, SOUND,
+        SET_VAR, ADD_VAR, SUB_VAR, RESET_VAR, CLEAR_VARS;
 
         public static ActionType fromString(String s) {
             return switch (s.toLowerCase()) {
@@ -111,6 +112,11 @@ public class GuiDefinition {
                 case "prev_page"   -> PREV_PAGE;
                 case "goto_page"   -> GOTO_PAGE;
                 case "sound"       -> SOUND;
+                case "set_var"     -> SET_VAR;
+                case "add_var"     -> ADD_VAR;
+                case "sub_var"     -> SUB_VAR;
+                case "reset_var"   -> RESET_VAR;
+                case "clear_vars"  -> CLEAR_VARS;
                 default            -> CLOSE;
             };
         }
@@ -124,7 +130,8 @@ public class GuiDefinition {
     }
 
     public enum ConditionType {
-        HAS_TAG, NOT_TAG, SCORE_GT, SCORE_LT, SCORE_EQ;
+        HAS_TAG, NOT_TAG, SCORE_GT, SCORE_LT, SCORE_EQ,
+        VAR_EQ, VAR_GT, VAR_LT, VAR_SET;
 
         public static ConditionType fromString(String s) {
             return switch (s.toLowerCase()) {
@@ -133,6 +140,10 @@ public class GuiDefinition {
                 case "score_gt" -> SCORE_GT;
                 case "score_lt" -> SCORE_LT;
                 case "score_eq" -> SCORE_EQ;
+                case "var_eq"   -> VAR_EQ;
+                case "var_gt"   -> VAR_GT;
+                case "var_lt"   -> VAR_LT;
+                case "var_set"  -> VAR_SET;
                 default         -> HAS_TAG;
             };
         }
@@ -140,9 +151,18 @@ public class GuiDefinition {
 
     // ── Records ──────────────────────────────────────────────────────────────
 
-    public record ButtonAction(ActionType type, String value, RunWith runWith) {
+    /**
+     * @param type    Action type
+     * @param value   Primary value (command, message, sound id, var value, page index…)
+     * @param runWith Execution context for run_command
+     * @param var     Variable key for set_var / add_var / sub_var / reset_var actions
+     */
+    public record ButtonAction(ActionType type, String value, RunWith runWith, String var) {
         public ButtonAction(ActionType type, String value) {
-            this(type, value, RunWith.PLAYER);
+            this(type, value, RunWith.PLAYER, "");
+        }
+        public ButtonAction(ActionType type, String value, RunWith runWith) {
+            this(type, value, runWith, "");
         }
     }
 
@@ -323,11 +343,12 @@ public class GuiDefinition {
     private static ButtonAction parseAction(JsonObject a) {
         ActionType type = ActionType.fromString(
                 a.has("type") ? a.get("type").getAsString() : "close");
-        String value    = a.has("value") ? a.get("value").getAsString() : "";
+        String value    = a.has("value")   ? a.get("value").getAsString()   : "";
+        String var      = a.has("var")     ? a.get("var").getAsString()     : "";
         RunWith runWith = a.has("run_with")
                 ? RunWith.fromString(a.get("run_with").getAsString())
                 : RunWith.PLAYER;
-        return new ButtonAction(type, value, runWith);
+        return new ButtonAction(type, value, runWith, var);
     }
 
     // ── Getters ──────────────────────────────────────────────────────────────

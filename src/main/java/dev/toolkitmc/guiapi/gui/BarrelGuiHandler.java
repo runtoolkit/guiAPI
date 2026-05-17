@@ -163,6 +163,8 @@ public class BarrelGuiHandler {
         for (GuiDefinition.ButtonAction action : state.def().getOnClose()) {
             executeAction(player, state.def(), state.page(), action);
         }
+        // Clear per-player runtime variables when the GUI closes.
+        GuiVarStore.INSTANCE.clear(player.getUuid());
     }
 
     // ── Inventory builder ────────────────────────────────────────────────────
@@ -269,6 +271,15 @@ public class BarrelGuiHandler {
             text = text.substring(0, idx) + score + text.substring(end + 1);
         }
 
+        // {var:key}
+        while ((idx = text.indexOf("{var:")) >= 0) {
+            int end = text.indexOf('}', idx);
+            if (end < 0) break;
+            String key = text.substring(idx + 5, end);
+            String val = GuiVarStore.INSTANCE.getOrDefault(player.getUuid(), key, "");
+            text = text.substring(0, idx) + val + text.substring(end + 1);
+        }
+
         return text;
     }
 
@@ -287,7 +298,28 @@ public class BarrelGuiHandler {
                              parseCondInt(cond.value().split(":"), 1);
             case SCORE_EQ -> getScore(player, cond.value().split(":"), 0) ==
                              parseCondInt(cond.value().split(":"), 1);
+            // var conditions — value format: "varKey:compareValue"
+            case VAR_EQ   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getOrDefault(player.getUuid(), p[0], "").equals(p[1]);
+            }
+            case VAR_GT   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getInt(player.getUuid(), p[0]) > parseIntSafe(p[1]);
+            }
+            case VAR_LT   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getInt(player.getUuid(), p[0]) < parseIntSafe(p[1]);
+            }
+            case VAR_SET  -> GuiVarStore.INSTANCE.get(player.getUuid(), cond.value()) != null;
         };
+    }
+
+    private static int parseIntSafe(String s) {
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; }
     }
 
     // ── Toggle action resolution ─────────────────────────────────────────────
@@ -403,6 +435,34 @@ public class BarrelGuiHandler {
                 } catch (NumberFormatException ignored) {}
                 return true;
             }
+            case SET_VAR -> {
+                if (!action.var().isEmpty()) {
+                    String resolved = resolve(action.value(), player, def, currentPage);
+                    GuiVarStore.INSTANCE.set(player.getUuid(), action.var(), resolved);
+                }
+            }
+            case ADD_VAR -> {
+                if (!action.var().isEmpty()) {
+                    try {
+                        int delta = Integer.parseInt(resolve(action.value(), player, def, currentPage));
+                        GuiVarStore.INSTANCE.add(player.getUuid(), action.var(), delta);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            case SUB_VAR -> {
+                if (!action.var().isEmpty()) {
+                    try {
+                        int delta = Integer.parseInt(resolve(action.value(), player, def, currentPage));
+                        GuiVarStore.INSTANCE.add(player.getUuid(), action.var(), -delta);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            case RESET_VAR -> {
+                if (!action.var().isEmpty()) {
+                    GuiVarStore.INSTANCE.remove(player.getUuid(), action.var());
+                }
+            }
+            case CLEAR_VARS -> GuiVarStore.INSTANCE.clear(player.getUuid());
         }
         return false;
     }
