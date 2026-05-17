@@ -24,6 +24,9 @@ Optionally install [Mod Menu](https://modrinth.com/mod/modmenu) to see loaded GU
 | `/guiapi open <id> <targets>` | Open a GUI for target players |
 | `/guiapi list` | List all loaded GUI definitions |
 | `/guiapi reload` | Reload all datapack resources (including GUIs) |
+| `/guiapi var get <player> <key>` | Get a player's runtime variable |
+| `/guiapi var set <player> <key> <value>` | Set a player's runtime variable |
+| `/guiapi var clear <player>` | Clear all runtime variables for a player |
 | `/guiapi help` | Show command and JSON field reference in-game |
 
 **Permission level 2** (OP) required.
@@ -90,6 +93,7 @@ Supported in `title`, button `name`, `lore`, `message` values, and `run_command`
 | `{page1}` | Current page index (1-based) |
 | `{pages}` | Total page count |
 | `{score:objective}` | Player's score in the given scoreboard objective |
+| `{var:key}` | Player's runtime variable `key` (empty string if unset) |
 
 ### `click_type` values
 
@@ -108,6 +112,12 @@ Supported in `title`, button `name`, `lore`, `message` values, and `run_command`
 | `close` | — | — | Close the GUI. |
 | `open_gui` | `namespace:name` | — | Close and open another GUI. |
 | `message` | Text string | — | Send a chat message to the player. Supports placeholders. |
+| `sound` | `namespace:sound.id` or `namespace:sound.id:volume:pitch` | — | Play a sound to the player. Volume and pitch default to `1.0`. |
+| `set_var` | New value (supports placeholders) | — | Set a runtime variable. Requires `"var": "key"` field. |
+| `add_var` | Integer to add | — | Add an integer to a runtime variable (creates it at 0 if unset). Requires `"var": "key"`. |
+| `sub_var` | Integer to subtract | — | Subtract an integer from a runtime variable. Requires `"var": "key"`. |
+| `reset_var` | — | — | Delete a single runtime variable. Requires `"var": "key"`. |
+| `clear_vars` | — | — | Delete all runtime variables for this player. |
 | `next_page` | — | — | Go to the next page. |
 | `prev_page` | — | — | Go to the previous page. |
 | `goto_page` | Page index (string) | — | Jump to a specific page. |
@@ -125,6 +135,10 @@ Conditions control button **visibility**. Hidden buttons cannot be clicked.
 | `score_gt` | `"objective:threshold"` | Player's score > threshold |
 | `score_lt` | `"objective:threshold"` | Player's score < threshold |
 | `score_eq` | `"objective:value"` | Player's score == value |
+| `var_eq` | `"key:value"` | Runtime variable `key` equals `value` (string compare) |
+| `var_gt` | `"key:value"` | Runtime variable `key` (int) > `value` |
+| `var_lt` | `"key:value"` | Runtime variable `key` (int) < `value` |
+| `var_set` | `key` | Runtime variable `key` is set (any value) |
 
 ### Toggle buttons
 
@@ -137,10 +151,10 @@ A toggle button shows different item/name/lore/actions depending on a scoreboard
 | `name_on` / `name_off` | string | `§aEnabled` / `§7Disabled` | Display name in each state. |
 | `lore_on` / `lore_off` | string[] | `[]` | Lore in each state. |
 | `glint_on` / `glint_off` | boolean | `false` | Glint in each state. |
-| `actions_on` | action[] | `[tag @s remove <tag>]` | Actions when clicking while ON. Default removes the tag. |
-| `actions_off` | action[] | `[tag @s add <tag>]` | Actions when clicking while OFF. Default adds the tag. |
+| `actions_on` | action[] | `[tag @s remove <tag>]` | Actions executed when clicking while ON (turning OFF). Default removes the tag. |
+| `actions_off` | action[] | `[tag @s add <tag>]` | Actions executed when clicking while OFF (turning ON). Default adds the tag. |
 
-The default `actions_on`/`actions_off` use `run_with: console` and handle the tag automatically — you only need to specify them if you want additional side effects.
+The tag is flipped via Java API before `actions_on`/`actions_off` run, so there is no race condition. Custom actions are executed in order after the flip — use them for sounds, messages, or side-effect commands. The GUI always reopens automatically to show the new state unless an action in the chain closes or navigates away.
 
 ---
 
@@ -181,6 +195,54 @@ The default `actions_on`/`actions_off` use `run_with: console` and handle the ta
 }
 ```
 
+### Runtime variables
+
+Variables are per-player, in-memory, and cleared when the GUI closes.
+
+```json
+{
+  "title": "§6Counter: {var:count}",
+  "rows": 1,
+  "on_open": [
+    { "type": "set_var", "var": "count", "value": "0" }
+  ],
+  "buttons": [
+    {
+      "slot": 3,
+      "item": "minecraft:lime_dye",
+      "name": "§a+1",
+      "lore": ["§7Count: §f{var:count}"],
+      "actions": [
+        { "type": "add_var", "var": "count", "value": "1" },
+        { "type": "open_gui", "value": "example:counter" }
+      ]
+    },
+    {
+      "slot": 4,
+      "item": "minecraft:red_dye",
+      "name": "§c-1",
+      "lore": ["§7Count: §f{var:count}"],
+      "condition": { "type": "var_gt", "value": "count:0" },
+      "actions": [
+        { "type": "sub_var", "var": "count", "value": "1" },
+        { "type": "open_gui", "value": "example:counter" }
+      ]
+    },
+    {
+      "slot": 5,
+      "item": "minecraft:barrier",
+      "name": "§7Reset",
+      "actions": [
+        { "type": "reset_var", "var": "count" },
+        { "type": "open_gui", "value": "example:counter" }
+      ]
+    }
+  ]
+}
+```
+
+> Variables survive page navigation within the same GUI but are cleared on close. Use `on_open` to initialize them to a known value.
+
 ### on_open and on_close hooks
 
 ```json
@@ -204,8 +266,16 @@ The default `actions_on`/`actions_off` use `run_with: console` and handle the ta
     "item_off":  "minecraft:barrier",
     "name_on":   "§aNotifications: ON",
     "name_off":  "§cNotifications: OFF",
-    "lore_on":   ["§7Click to disable."],
-    "lore_off":  ["§7Click to enable."]
+    "lore_on":   ["§7Click to disable.", "§8Player: {player}"],
+    "lore_off":  ["§7Click to enable.",  "§8Player: {player}"],
+    "actions_on": [
+      { "type": "sound",   "value": "minecraft:block.lever.click:1.0:0.8" },
+      { "type": "message", "value": "§7Notifications disabled, {player}." }
+    ],
+    "actions_off": [
+      { "type": "sound",   "value": "minecraft:block.lever.click:1.0:1.2" },
+      { "type": "message", "value": "§aNotifications enabled, {player}!" }
+    ]
   }
 }
 ```

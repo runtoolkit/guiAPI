@@ -116,26 +116,21 @@ public class BarrelGuiHandler {
             boolean isToggle = btn.toggle().isPresent();
             List<GuiDefinition.ButtonAction> actions = resolveActions(player, btn);
 
-            // For toggle buttons: apply the tag flip directly in Java (synchronous)
-            // before running custom actions and reopening. This avoids the race
-            // between command dispatcher execution and inventory rebuild.
             if (isToggle) {
                 GuiDefinition.ToggleDefinition tgl = btn.toggle().get();
+                // Resolve the correct action list BEFORE flipping the tag,
+                // so actionsOn fires when the toggle was ON (turning it OFF), etc.
+                List<GuiDefinition.ButtonAction> toggleActions = resolveActions(player, btn);
+
+                // Flip tag synchronously via Java API — avoids command dispatcher race.
                 boolean wasOn = player.getCommandTags().contains(tgl.tag());
-                if (wasOn) {
-                    player.removeCommandTag(tgl.tag());
-                } else {
-                    player.addCommandTag(tgl.tag());
-                }
-                // Run any custom side-effect actions (skip default tag commands)
+                if (wasOn) player.removeCommandTag(tgl.tag());
+                else       player.addCommandTag(tgl.tag());
+
+                // Execute all defined actions. Default tag commands were already
+                // applied above; run everything else (sounds, messages, commands…).
                 boolean chainBroken = false;
-                for (GuiDefinition.ButtonAction action : actions) {
-                    // Skip the auto-generated tag add/remove defaults
-                    if (action.runWith() == GuiDefinition.RunWith.CONSOLE
-                            && (action.value().startsWith("tag @s add " + tgl.tag())
-                             || action.value().startsWith("tag @s remove " + tgl.tag()))) {
-                        continue;
-                    }
+                for (GuiDefinition.ButtonAction action : toggleActions) {
                     boolean shouldBreak = executeAction(player, def, page, action);
                     if (shouldBreak) { chainBroken = true; break; }
                 }
@@ -168,6 +163,8 @@ public class BarrelGuiHandler {
         for (GuiDefinition.ButtonAction action : state.def().getOnClose()) {
             executeAction(player, state.def(), state.page(), action);
         }
+        // Clear per-player runtime variables when the GUI closes.
+        GuiVarStore.INSTANCE.clear(player.getUuid());
     }
 
     // ── Inventory builder ────────────────────────────────────────────────────
@@ -274,6 +271,15 @@ public class BarrelGuiHandler {
             text = text.substring(0, idx) + score + text.substring(end + 1);
         }
 
+        // {var:key}
+        while ((idx = text.indexOf("{var:")) >= 0) {
+            int end = text.indexOf('}', idx);
+            if (end < 0) break;
+            String key = text.substring(idx + 5, end);
+            String val = GuiVarStore.INSTANCE.getOrDefault(player.getUuid(), key, "");
+            text = text.substring(0, idx) + val + text.substring(end + 1);
+        }
+
         return text;
     }
 
@@ -292,7 +298,28 @@ public class BarrelGuiHandler {
                              parseCondInt(cond.value().split(":"), 1);
             case SCORE_EQ -> getScore(player, cond.value().split(":"), 0) ==
                              parseCondInt(cond.value().split(":"), 1);
+            // var conditions — value format: "varKey:compareValue"
+            case VAR_EQ   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getOrDefault(player.getUuid(), p[0], "").equals(p[1]);
+            }
+            case VAR_GT   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getInt(player.getUuid(), p[0]) > parseIntSafe(p[1]);
+            }
+            case VAR_LT   -> {
+                String[] p = cond.value().split(":", 2);
+                yield p.length == 2 && GuiVarStore.INSTANCE
+                        .getInt(player.getUuid(), p[0]) < parseIntSafe(p[1]);
+            }
+            case VAR_SET  -> GuiVarStore.INSTANCE.get(player.getUuid(), cond.value()) != null;
         };
+    }
+
+    private static int parseIntSafe(String s) {
+        try { return Integer.parseInt(s); } catch (NumberFormatException e) { return 0; }
     }
 
     // ── Toggle action resolution ─────────────────────────────────────────────
@@ -366,6 +393,38 @@ public class BarrelGuiHandler {
                 }
                 return true;
             }
+            case SOUND -> {
+                // value format: "minecraft:sound.id"  (volume=1.0, pitch=1.0)
+                //           or: "minecraft:sound.id:volume:pitch"
+                String[] parts = action.value().split(":");
+                // Reconstruct namespace:path which may itself contain ':'
+                // Format is always <namespace>:<path>[:<volume>[:<pitch>]]
+                // So minimum 2 parts (namespace + path), max 4.
+                String soundId;
+                float volume = 1.0f;
+                float pitch  = 1.0f;
+                if (parts.length >= 4) {
+                    soundId = parts[0] + ":" + parts[1];
+                    try { volume = Float.parseFloat(parts[2]); } catch (NumberFormatException ignored) {}
+                    try { pitch  = Float.parseFloat(parts[3]); } catch (NumberFormatException ignored) {}
+                } else if (parts.length == 3) {
+                    soundId = parts[0] + ":" + parts[1];
+                    try { volume = Float.parseFloat(parts[2]); } catch (NumberFormatException ignored) {}
+                } else {
+                    soundId = action.value();
+                }
+                Identifier soundIdent = Identifier.tryParse(soundId);
+                if (soundIdent != null) {
+                    net.minecraft.sound.SoundEvent soundEvent =
+                            Registries.SOUND_EVENT.get(soundIdent);
+                    if (soundEvent != null) {
+                        player.playSoundToPlayer(soundEvent,
+                                net.minecraft.sound.SoundCategory.PLAYERS, volume, pitch);
+                    } else {
+                        GuiApiMod.LOGGER.warn("[GuiAPI] Unknown sound '{}' in sound action.", soundId);
+                    }
+                }
+            }
             case GOTO_PAGE -> {
                 try {
                     int target = Integer.parseInt(action.value());
@@ -376,6 +435,34 @@ public class BarrelGuiHandler {
                 } catch (NumberFormatException ignored) {}
                 return true;
             }
+            case SET_VAR -> {
+                if (!action.var().isEmpty()) {
+                    String resolved = resolve(action.value(), player, def, currentPage);
+                    GuiVarStore.INSTANCE.set(player.getUuid(), action.var(), resolved);
+                }
+            }
+            case ADD_VAR -> {
+                if (!action.var().isEmpty()) {
+                    try {
+                        int delta = Integer.parseInt(resolve(action.value(), player, def, currentPage));
+                        GuiVarStore.INSTANCE.add(player.getUuid(), action.var(), delta);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            case SUB_VAR -> {
+                if (!action.var().isEmpty()) {
+                    try {
+                        int delta = Integer.parseInt(resolve(action.value(), player, def, currentPage));
+                        GuiVarStore.INSTANCE.add(player.getUuid(), action.var(), -delta);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            case RESET_VAR -> {
+                if (!action.var().isEmpty()) {
+                    GuiVarStore.INSTANCE.remove(player.getUuid(), action.var());
+                }
+            }
+            case CLEAR_VARS -> GuiVarStore.INSTANCE.clear(player.getUuid());
         }
         return false;
     }

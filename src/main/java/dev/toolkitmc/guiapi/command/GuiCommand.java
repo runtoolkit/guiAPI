@@ -1,9 +1,11 @@
 package dev.toolkitmc.guiapi.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
 import dev.toolkitmc.guiapi.gui.BarrelGuiHandler;
 import dev.toolkitmc.guiapi.gui.GuiDefinition;
+import dev.toolkitmc.guiapi.gui.GuiVarStore;
 import dev.toolkitmc.guiapi.loader.GuiRegistry;
 import net.minecraft.command.argument.EntityArgumentType;
 import net.minecraft.command.argument.IdentifierArgumentType;
@@ -15,6 +17,7 @@ import net.minecraft.util.Identifier;
 
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 
 /**
  * /guiapi open <namespace:id> [<targets>]
@@ -62,11 +65,23 @@ public class GuiCommand {
                 .then(CommandManager.literal("list")
                     .executes(GuiCommand::listGuis))
 
-                .then(CommandManager.literal("reload")
-                    .executes(GuiCommand::reloadGuis))
-
                 .then(CommandManager.literal("help")
                     .executes(GuiCommand::showHelp))
+
+                .then(CommandManager.literal("var")
+                    .then(CommandManager.literal("get")
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .then(CommandManager.argument("key", StringArgumentType.word())
+                                .executes(GuiCommand::varGet))))
+                    .then(CommandManager.literal("set")
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .then(CommandManager.argument("key", StringArgumentType.word())
+                                .then(CommandManager.argument("value", StringArgumentType.greedyString())
+                                    .executes(GuiCommand::varSet)))))
+                    .then(CommandManager.literal("clear")
+                        .then(CommandManager.argument("target", EntityArgumentType.player())
+                            .executes(GuiCommand::varClear)))
+                )
         );
     }
 
@@ -124,20 +139,63 @@ public class GuiCommand {
         return 1;
     }
 
+    private static int varGet(CommandContext<ServerCommandSource> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+        String key = StringArgumentType.getString(ctx, "key");
+        String val = GuiVarStore.INSTANCE.get(target.getUuid(), key);
+        if (val == null) {
+            ctx.getSource().sendFeedback(
+                    () -> Text.literal("[GuiAPI] " + target.getName().getString() + "." + key + " is not set."), false);
+        } else {
+            ctx.getSource().sendFeedback(
+                    () -> Text.literal("[GuiAPI] " + target.getName().getString() + "." + key + " = " + val), false);
+        }
+        return val != null ? 1 : 0;
+    }
+
+    private static int varSet(CommandContext<ServerCommandSource> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+        String key   = StringArgumentType.getString(ctx, "key");
+        String value = StringArgumentType.getString(ctx, "value");
+        GuiVarStore.INSTANCE.set(target.getUuid(), key, value);
+        ctx.getSource().sendFeedback(
+                () -> Text.literal("[GuiAPI] Set " + target.getName().getString() + "." + key + " = " + value), false);
+        return 1;
+    }
+
+    private static int varClear(CommandContext<ServerCommandSource> ctx) throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        ServerPlayerEntity target = EntityArgumentType.getPlayer(ctx, "target");
+        Map<String, String> vars = GuiVarStore.INSTANCE.getAll(target.getUuid());
+        int count = vars.size();
+        GuiVarStore.INSTANCE.clear(target.getUuid());
+        ctx.getSource().sendFeedback(
+                () -> Text.literal("[GuiAPI] Cleared " + count + " var(s) for " + target.getName().getString() + "."), false);
+        return count;
+    }
+
     private static int showHelp(CommandContext<ServerCommandSource> ctx) {
         String help =
                 "[GuiAPI] Commands (permission level 2):\n" +
                 "  /guiapi open <id> [targets] - Open a GUI for yourself or target players\n" +
                 "  /guiapi list               - List all loaded GUI definitions\n" +
                 "  /guiapi reload             - Reload all datapack resources (including GUIs)\n" +
+                "  /guiapi var get <player> <key>        - Get a runtime variable\n" +
+                "  /guiapi var set <player> <key> <val>  - Set a runtime variable\n" +
+                "  /guiapi var clear <player>            - Clear all runtime variables\n" +
                 "  /guiapi help               - Show this help message\n" +
+                "\n" +
+                "Variable actions:  set_var | add_var | sub_var | reset_var | clear_vars\n" +
+                "Variable conditions: var_eq | var_gt | var_lt | var_set\n" +
+                "Variable placeholder: {var:key}\n" +
                 "\n" +
                 "Button JSON fields:\n" +
                 "  slot, page, item, name, lore, glint\n" +
-                "  click_type: any | left | right | shift  (default: any)\n" +
-                "  condition:  has_tag | score_gt | score_lt | score_eq\n" +
-                "  actions:    run_command | close | open_gui | message\n" +
-                "              next_page | prev_page | goto_page";
+                "  click_type: any | left | right | shift\n" +
+                "  condition:  has_tag | not_tag | score_gt | score_lt | score_eq\n" +
+                "              var_eq | var_gt | var_lt | var_set\n" +
+                "  actions:    run_command | close | open_gui | message | sound\n" +
+                "              next_page | prev_page | goto_page\n" +
+                "              set_var | add_var | sub_var | reset_var | clear_vars";
         ctx.getSource().sendFeedback(() -> Text.literal(help), false);
         return 1;
     }
