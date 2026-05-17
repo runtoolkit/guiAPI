@@ -32,7 +32,8 @@ public class GuiCommand {
     public static void register(CommandDispatcher<ServerCommandSource> dispatcher) {
         dispatcher.register(
             CommandManager.literal("guiapi")
-                .requires(src -> src.hasPermissionLevel(2))
+                .requires(src -> src.hasPermissionLevel(
+                        dev.toolkitmc.guiapi.config.GuiApiConfig.INSTANCE.getPermissionLevel()))
                 .executes(GuiCommand::showHelp)
 
                 .then(CommandManager.literal("open")

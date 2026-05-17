@@ -32,6 +32,7 @@ public final class GuiApiConfig {
     private boolean allowConsoleRunWith = true;
     private boolean logUnknownItems     = true;
     private boolean logUnknownSounds    = true;
+    private int     permissionLevel     = 2;
 
     private GuiApiConfig() {}
 
@@ -53,6 +54,8 @@ public final class GuiApiConfig {
                 logUnknownItems = obj.get("log_unknown_items").getAsBoolean();
             if (obj.has("log_unknown_sounds"))
                 logUnknownSounds = obj.get("log_unknown_sounds").getAsBoolean();
+            if (obj.has("permission_level"))
+                permissionLevel = Math.clamp(obj.get("permission_level").getAsInt(), 0, 4);
 
         } catch (IOException e) {
             GuiApiMod.LOGGER.error("[GuiAPI] Failed to load config: {}", e.getMessage());
@@ -64,6 +67,7 @@ public final class GuiApiConfig {
         obj.addProperty("allow_console_run_with", allowConsoleRunWith);
         obj.addProperty("log_unknown_items",       logUnknownItems);
         obj.addProperty("log_unknown_sounds",      logUnknownSounds);
+        obj.addProperty("permission_level",        permissionLevel);
         try {
             Files.writeString(CONFIG_PATH, GSON.toJson(obj));
         } catch (IOException e) {
@@ -76,8 +80,10 @@ public final class GuiApiConfig {
     public boolean isAllowConsoleRunWith() { return allowConsoleRunWith; }
     public boolean isLogUnknownItems()     { return logUnknownItems; }
     public boolean isLogUnknownSounds()    { return logUnknownSounds; }
+    public int     getPermissionLevel()    { return permissionLevel; }
 
     public void setAllowConsoleRunWith(boolean v) { allowConsoleRunWith = v; }
     public void setLogUnknownItems(boolean v)     { logUnknownItems = v; }
     public void setLogUnknownSounds(boolean v)    { logUnknownSounds = v; }
+    public void setPermissionLevel(int v)         { permissionLevel = Math.clamp(v, 0, 4); }
 }

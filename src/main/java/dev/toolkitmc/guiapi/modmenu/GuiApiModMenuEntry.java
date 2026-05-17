@@ -32,6 +32,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
         private boolean allowConsoleRunWith;
         private boolean logUnknownItems;
         private boolean logUnknownSounds;
+        private int     permissionLevel;
 
         GuiApiConfigScreen(Screen parent) {
             super(Text.literal("GUI API — Settings"));
@@ -40,6 +41,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
             this.allowConsoleRunWith = cfg.isAllowConsoleRunWith();
             this.logUnknownItems     = cfg.isLogUnknownItems();
             this.logUnknownSounds    = cfg.isLogUnknownSounds();
+            this.permissionLevel     = cfg.getPermissionLevel();
         }
 
         @Override
@@ -68,6 +70,15 @@ public class GuiApiModMenuEntry implements ModMenuApi {
                     "Print a WARN to the log when a sound action uses an unrecognized sound ID.",
                     logUnknownSounds,
                     v -> logUnknownSounds = v);
+            y += 28;
+
+            // Permission level — cycle 0-4
+            addDrawableChild(new TextWidget(cx - 150, y + 4, 200, 10,
+                    Text.literal("§fCommand permission level"), textRenderer));
+            addDrawableChild(ButtonWidget.builder(permLevelText(permissionLevel), btn -> {
+                permissionLevel = (permissionLevel + 1) % 5;
+                btn.setMessage(permLevelText(permissionLevel));
+            }).dimensions(cx + 60, y, 40, 20).build());
             y += 40;
 
             // ── Loaded GUI list ───────────────────────────────────────────────
@@ -101,6 +112,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
                 cfg.setAllowConsoleRunWith(allowConsoleRunWith);
                 cfg.setLogUnknownItems(logUnknownItems);
                 cfg.setLogUnknownSounds(logUnknownSounds);
+                cfg.setPermissionLevel(permissionLevel);
                 cfg.save();
                 MinecraftClient.getInstance().setScreen(parent);
             }).dimensions(cx - 105, height - 30, 100, 20).build());
@@ -148,6 +160,18 @@ public class GuiApiModMenuEntry implements ModMenuApi {
 
         private static Text toggleText(boolean on) {
             return on ? Text.literal("§aON") : Text.literal("§cOFF");
+        }
+
+        private static Text permLevelText(int level) {
+            String color = switch (level) {
+                case 0 -> "§a";
+                case 1 -> "§b";
+                case 2 -> "§e";
+                case 3 -> "§6";
+                case 4 -> "§c";
+                default -> "§f";
+            };
+            return Text.literal(color + level);
         }
     }
 }
