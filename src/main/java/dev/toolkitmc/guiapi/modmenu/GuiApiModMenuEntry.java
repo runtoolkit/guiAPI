@@ -33,6 +33,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
         private boolean logUnknownItems;
         private boolean logUnknownSounds;
         private int     permissionLevel;
+        private boolean debugMode;
 
         GuiApiConfigScreen(Screen parent) {
             super(Text.literal("GUI API — Settings"));
@@ -42,6 +43,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
             this.logUnknownItems     = cfg.isLogUnknownItems();
             this.logUnknownSounds    = cfg.isLogUnknownSounds();
             this.permissionLevel     = cfg.getPermissionLevel();
+            this.debugMode           = cfg.isDebugMode();
         }
 
         @Override
@@ -70,6 +72,13 @@ public class GuiApiModMenuEntry implements ModMenuApi {
                     "Print a WARN to the log when a sound action uses an unrecognized sound ID.",
                     logUnknownSounds,
                     v -> logUnknownSounds = v);
+            y += 28;
+
+            addToggle(cx, y, "debug_mode",
+                    "Debug mode",
+                    "Log GUI open/close, action execution and placeholder resolution to console.",
+                    debugMode,
+                    v -> debugMode = v);
             y += 28;
 
             // Permission level — cycle 0-4
@@ -113,6 +122,7 @@ public class GuiApiModMenuEntry implements ModMenuApi {
                 cfg.setLogUnknownItems(logUnknownItems);
                 cfg.setLogUnknownSounds(logUnknownSounds);
                 cfg.setPermissionLevel(permissionLevel);
+                cfg.setDebugMode(debugMode);
                 cfg.save();
                 MinecraftClient.getInstance().setScreen(parent);
             }).dimensions(cx - 105, height - 30, 100, 20).build());

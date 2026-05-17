@@ -51,6 +51,11 @@ public class BarrelGuiHandler {
 
     private BarrelGuiHandler() {}
 
+    private static void debug(String msg, Object... args) {
+        if (dev.toolkitmc.guiapi.config.GuiApiConfig.INSTANCE.isDebugMode())
+            GuiApiMod.LOGGER.info("[GuiAPI|Debug] " + msg, args);
+    }
+
     // ── Public API ───────────────────────────────────────────────────────────
 
     public static void open(ServerPlayerEntity player, GuiDefinition def) {
@@ -65,6 +70,7 @@ public class BarrelGuiHandler {
         // Register state BEFORE building inventory so that any handleClick call
         // triggered during screen open (edge case) already sees the correct state.
         OPEN_GUIS.put(player.getUuid(), new OpenState(def, page));
+        debug("open: player={} gui={} page={}", player.getNameForScoreboard(), def.getId(), page);
         SimpleInventory inv = buildInventory(player, def, page, rows * 9);
 
         String resolvedTitle = resolve(def.getTitle(), player, def, page);
@@ -165,6 +171,7 @@ public class BarrelGuiHandler {
     public static void onClose(ServerPlayerEntity player) {
         OpenState state = OPEN_GUIS.remove(player.getUuid());
         if (state == null) return;
+        debug("close: player={} gui={}", player.getNameForScoreboard(), state.def().getId());
         for (GuiDefinition.ButtonAction action : state.def().getOnClose()) {
             executeAction(player, state.def(), state.page(), action);
         }
@@ -295,6 +302,7 @@ public class BarrelGuiHandler {
             text = text.substring(0, idx) + val + text.substring(end + 1);
         }
 
+        debug("resolve: \"{}\" → \"{}\"", text.length() > 60 ? text.substring(0, 60) + "..." : text, text);
         return text;
     }
 
@@ -361,6 +369,8 @@ public class BarrelGuiHandler {
     static boolean executeAction(ServerPlayerEntity player, GuiDefinition def,
                                  int currentPage, GuiDefinition.ButtonAction action) {
         MinecraftServer server = player.getServer();
+        debug("action: player={} type={} value=\"{}\"",
+                player.getNameForScoreboard(), action.type(), action.value());
         switch (action.type()) {
             case RUN_COMMAND -> {
                 String cmd = action.value().startsWith("/")

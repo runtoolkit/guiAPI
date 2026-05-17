@@ -33,6 +33,7 @@ public final class GuiApiConfig {
     private boolean logUnknownItems     = true;
     private boolean logUnknownSounds    = true;
     private int     permissionLevel     = 2;
+    private boolean debugMode           = false;
 
     private GuiApiConfig() {}
 
@@ -56,6 +57,8 @@ public final class GuiApiConfig {
                 logUnknownSounds = obj.get("log_unknown_sounds").getAsBoolean();
             if (obj.has("permission_level"))
                 permissionLevel = Math.clamp(obj.get("permission_level").getAsInt(), 0, 4);
+            if (obj.has("debug_mode"))
+                debugMode = obj.get("debug_mode").getAsBoolean();
 
         } catch (IOException e) {
             GuiApiMod.LOGGER.error("[GuiAPI] Failed to load config: {}", e.getMessage());
@@ -68,6 +71,7 @@ public final class GuiApiConfig {
         obj.addProperty("log_unknown_items",       logUnknownItems);
         obj.addProperty("log_unknown_sounds",      logUnknownSounds);
         obj.addProperty("permission_level",        permissionLevel);
+        obj.addProperty("debug_mode",              debugMode);
         try {
             Files.writeString(CONFIG_PATH, GSON.toJson(obj));
         } catch (IOException e) {
@@ -86,4 +90,7 @@ public final class GuiApiConfig {
     public void setLogUnknownItems(boolean v)     { logUnknownItems = v; }
     public void setLogUnknownSounds(boolean v)    { logUnknownSounds = v; }
     public void setPermissionLevel(int v)         { permissionLevel = Math.clamp(v, 0, 4); }
+
+    public boolean isDebugMode()                  { return debugMode; }
+    public void setDebugMode(boolean v)           { debugMode = v; }
 }
