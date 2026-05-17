@@ -2,88 +2,152 @@ package dev.toolkitmc.guiapi.modmenu;
 
 import com.terraformersmc.modmenu.api.ConfigScreenFactory;
 import com.terraformersmc.modmenu.api.ModMenuApi;
+import dev.toolkitmc.guiapi.config.GuiApiConfig;
 import dev.toolkitmc.guiapi.loader.GuiRegistry;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
-import net.minecraft.client.gui.screen.multiplayer.AddServerScreen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.TextWidget;
 import net.minecraft.text.Text;
 
 /**
- * Mod Menu integration — shows a simple info screen listing loaded GUIs.
- *
- * This class is only loaded when Mod Menu is present (modCompileOnly dependency).
- * The entrypoint declaration in fabric.mod.json is under "modmenu", which Fabric
- * Loader only invokes if the modmenu mod is installed.
+ * Mod Menu integration — settings screen + loaded GUI list.
+ * Only loaded when Mod Menu is present (modCompileOnly dependency).
  */
 public class GuiApiModMenuEntry implements ModMenuApi {
 
     @Override
     public ConfigScreenFactory<?> getModConfigScreenFactory() {
-        return parent -> new GuiApiInfoScreen(parent);
+        return GuiApiConfigScreen::new;
     }
 
-    // ── Simple info screen ───────────────────────────────────────────────────
+    // ── Config screen ────────────────────────────────────────────────────────
 
-    private static class GuiApiInfoScreen extends Screen {
+    static class GuiApiConfigScreen extends Screen {
 
         private final Screen parent;
 
-        protected GuiApiInfoScreen(Screen parent) {
-            super(Text.literal("GUI API"));
+        // Live copies of settings (applied on Save)
+        private boolean allowConsoleRunWith;
+        private boolean logUnknownItems;
+        private boolean logUnknownSounds;
+
+        GuiApiConfigScreen(Screen parent) {
+            super(Text.literal("GUI API — Settings"));
             this.parent = parent;
+            GuiApiConfig cfg = GuiApiConfig.INSTANCE;
+            this.allowConsoleRunWith = cfg.isAllowConsoleRunWith();
+            this.logUnknownItems     = cfg.isLogUnknownItems();
+            this.logUnknownSounds    = cfg.isLogUnknownSounds();
         }
 
         @Override
         protected void init() {
-            // Title
-            addDrawableChild(new TextWidget(
-                    width / 2 - 150, 20, 300, 10,
-                    Text.literal("§6GUI API §7— Datapack-driven chest GUI system"),
-                    textRenderer));
+            int cx = width / 2;
+            int y  = 45;
 
-            // Loaded GUI count
-            int count = GuiRegistry.INSTANCE.getAll().size();
-            addDrawableChild(new TextWidget(
-                    width / 2 - 150, 40, 300, 10,
+            // ── Settings ─────────────────────────────────────────────────────
+
+            addToggle(cx, y, "allow_console_run_with",
+                    "Allow run_with: console",
+                    "Permit buttons to run commands with console (OP-level) permission.",
+                    allowConsoleRunWith,
+                    v -> allowConsoleRunWith = v);
+            y += 28;
+
+            addToggle(cx, y, "log_unknown_items",
+                    "Log unknown item IDs",
+                    "Print a WARN to the log when a button uses an unrecognized item ID.",
+                    logUnknownItems,
+                    v -> logUnknownItems = v);
+            y += 28;
+
+            addToggle(cx, y, "log_unknown_sounds",
+                    "Log unknown sound IDs",
+                    "Print a WARN to the log when a sound action uses an unrecognized sound ID.",
+                    logUnknownSounds,
+                    v -> logUnknownSounds = v);
+            y += 40;
+
+            // ── Loaded GUI list ───────────────────────────────────────────────
+            var all = GuiRegistry.INSTANCE.getAll();
+            int count = all.size();
+            addDrawableChild(new TextWidget(cx - 150, y, 300, 10,
                     Text.literal("§7Loaded GUIs: §f" + count +
                             (count == 0 ? " §c(join a world to load datapacks)" : "")),
                     textRenderer));
+            y += 14;
 
-            // Loaded GUI list (up to 10)
-            int y = 60;
             int shown = 0;
-            for (var entry : GuiRegistry.INSTANCE.getAll().entrySet()) {
-                if (shown >= 10) {
-                    addDrawableChild(new TextWidget(
-                            width / 2 - 150, y, 300, 10,
-                            Text.literal("§8... and " + (count - 10) + " more"),
-                            textRenderer));
+            for (var entry : all.entrySet()) {
+                if (shown >= 8) {
+                    addDrawableChild(new TextWidget(cx - 150, y, 300, 10,
+                            Text.literal("§8... and " + (count - 8) + " more"), textRenderer));
                     break;
                 }
                 var def = entry.getValue();
-                addDrawableChild(new TextWidget(
-                        width / 2 - 150, y, 300, 10,
+                addDrawableChild(new TextWidget(cx - 150, y, 300, 10,
                         Text.literal("§a" + entry.getKey() +
-                                " §8[rows=" + def.getRows() +
-                                ", pages=" + def.getPageCount() + "]"),
+                                " §8[rows=" + def.getRows() + ", pages=" + def.getPageCount() + "]"),
                         textRenderer));
                 y += 12;
                 shown++;
             }
 
-            // Close button
-            addDrawableChild(ButtonWidget.builder(
-                    Text.literal("Close"),
-                    btn -> MinecraftClient.getInstance().setScreen(parent))
-                    .dimensions(width / 2 - 50, height - 30, 100, 20)
-                    .build());
+            // ── Buttons ───────────────────────────────────────────────────────
+            addDrawableChild(ButtonWidget.builder(Text.literal("Save & Close"), btn -> {
+                GuiApiConfig cfg = GuiApiConfig.INSTANCE;
+                cfg.setAllowConsoleRunWith(allowConsoleRunWith);
+                cfg.setLogUnknownItems(logUnknownItems);
+                cfg.setLogUnknownSounds(logUnknownSounds);
+                cfg.save();
+                MinecraftClient.getInstance().setScreen(parent);
+            }).dimensions(cx - 105, height - 30, 100, 20).build());
+
+            addDrawableChild(ButtonWidget.builder(Text.literal("Cancel"), btn ->
+                    MinecraftClient.getInstance().setScreen(parent))
+                    .dimensions(cx + 5, height - 30, 100, 20).build());
+        }
+
+        @Override
+        public void render(DrawContext ctx, int mouseX, int mouseY, float delta) {
+            super.render(ctx, mouseX, mouseY, delta);
+            // Title
+            ctx.drawCenteredTextWithShadow(textRenderer,
+                    Text.literal("§6GUI API §7Settings"), width / 2, 15, 0xFFFFFF);
+            // Divider above buttons
+            ctx.fill(width / 2 - 150, height - 40, width / 2 + 150, height - 39, 0x44FFFFFF);
         }
 
         @Override
         public void close() {
             MinecraftClient.getInstance().setScreen(parent);
+        }
+
+        // ── Toggle helper ─────────────────────────────────────────────────────
+
+        private void addToggle(int cx, int y, String key, String label, String tooltip,
+                               boolean initial, java.util.function.Consumer<Boolean> onChange) {
+            // Label
+            addDrawableChild(new TextWidget(cx - 150, y + 4, 200, 10,
+                    Text.literal("§f" + label), textRenderer));
+
+            // Toggle button — shows ON/OFF, cycles on click
+            ButtonWidget[] ref = new ButtonWidget[1];
+            ref[0] = ButtonWidget.builder(toggleText(initial), btn -> {
+                boolean next = btn.getMessage().getString().contains("ON") ? false : true;
+                // Invert: if currently showing ON, clicking turns it OFF
+                next = !btn.getMessage().getString().contains("ON");
+                onChange.accept(next);
+                btn.setMessage(toggleText(next));
+            }).dimensions(cx + 60, y, 40, 20).build();
+
+            addDrawableChild(ref[0]);
+        }
+
+        private static Text toggleText(boolean on) {
+            return on ? Text.literal("§aON") : Text.literal("§cOFF");
         }
     }
 }

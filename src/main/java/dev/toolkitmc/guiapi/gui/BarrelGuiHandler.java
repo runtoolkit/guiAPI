@@ -224,7 +224,8 @@ public class BarrelGuiHandler {
         if (id != null && Registries.ITEM.containsId(id)) {
             item = Registries.ITEM.get(id);
         } else {
-            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", itemId, btn.slot());
+            if (dev.toolkitmc.guiapi.config.GuiApiConfig.INSTANCE.isLogUnknownItems())
+                GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", itemId, btn.slot());
             item = Items.STONE;
         }
 
@@ -365,6 +366,10 @@ public class BarrelGuiHandler {
                 // Resolve placeholders in command value too
                 cmd = resolve(cmd, player, def, currentPage);
                 if (action.runWith() == GuiDefinition.RunWith.CONSOLE) {
+                    if (!dev.toolkitmc.guiapi.config.GuiApiConfig.INSTANCE.isAllowConsoleRunWith()) {
+                        GuiApiMod.LOGGER.warn("[GuiAPI] run_with:console is disabled in config. Skipping: {}", cmd);
+                        break;
+                    }
                     server.getCommandManager().executeWithPrefix(server.getCommandSource(), cmd);
                 } else {
                     server.getCommandManager().executeWithPrefix(player.getCommandSource(), cmd);
@@ -436,7 +441,8 @@ public class BarrelGuiHandler {
                         player.playSoundToPlayer(soundEvent,
                                 net.minecraft.sound.SoundCategory.PLAYERS, volume, pitch);
                     } else {
-                        GuiApiMod.LOGGER.warn("[GuiAPI] Unknown sound '{}' in sound action.", soundId);
+                        if (dev.toolkitmc.guiapi.config.GuiApiConfig.INSTANCE.isLogUnknownSounds())
+                            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown sound '{}' in sound action.", soundId);
                     }
                 }
             }

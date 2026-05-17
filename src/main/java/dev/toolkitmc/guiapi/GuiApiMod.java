@@ -1,6 +1,7 @@
 package dev.toolkitmc.guiapi;
 
 import dev.toolkitmc.guiapi.command.GuiCommand;
+import dev.toolkitmc.guiapi.config.GuiApiConfig;
 import dev.toolkitmc.guiapi.loader.GuiRegistry;
 import net.fabricmc.api.ModInitializer;
 import net.fabricmc.fabric.api.command.v2.CommandRegistrationCallback;
@@ -17,6 +18,8 @@ public class GuiApiMod implements ModInitializer {
     @Override
     public void onInitialize() {
         LOGGER.info("[GuiAPI] Initializing...");
+
+        GuiApiConfig.INSTANCE.load();
 
         ResourceManagerHelper.get(ResourceType.SERVER_DATA)
                 .registerReloadListener(GuiRegistry.INSTANCE);
