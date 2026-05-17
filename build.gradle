@@ -77,14 +77,13 @@ publishing {
             artifactId = project.archives_base_name
             version = project.mod_version
 
-            from components.java
-
             artifact(remapJar) {
                 builtBy remapJar
             }
 
-            artifact(sourcesJar) {
-                builtBy sourcesJar
+            artifact(remapSourcesJar) {
+                builtBy remapSourcesJar
+                classifier = 'sources'
             }
 
             pom {
