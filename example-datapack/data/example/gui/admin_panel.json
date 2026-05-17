@@ -1,6 +1,12 @@
 {
-  "title": "§6Admin Panel",
+  "title": "§6Admin Panel §8— {player}",
   "rows": 3,
+  "on_open": [
+    { "type": "run_command", "value": "tag @s add in_admin_panel", "run_with": "console" }
+  ],
+  "on_close": [
+    { "type": "run_command", "value": "tag @s remove in_admin_panel", "run_with": "console" }
+  ],
   "buttons": [
     {
       "slot": 10,
@@ -14,7 +20,7 @@
     {
       "slot": 12,
       "item": "minecraft:compass",
-      "name": "§bSpawn",
+      "name": "§bSpawn §8(Left)",
       "lore": ["§7Teleport to spawn.", "§8Left-click only."],
       "click_type": "left",
       "actions": [
@@ -25,12 +31,25 @@
     {
       "slot": 12,
       "item": "minecraft:compass",
-      "name": "§bSpawn",
-      "lore": ["§7See your coordinates.", "§8Right-click only."],
+      "name": "§bCoords §8(Right)",
+      "lore": ["§7Show your coordinates.", "§8Right-click only."],
       "click_type": "right",
       "actions": [
         { "type": "run_command", "value": "execute as @s run data get entity @s Pos" }
       ]
+    },
+    {
+      "slot": 13,
+      "toggle": {
+        "tag": "pvp_enabled",
+        "item_on":  "minecraft:iron_sword",
+        "item_off": "minecraft:shield",
+        "name_on":  "§cPvP: ON",
+        "name_off": "§aPvP: OFF",
+        "lore_on":  ["§7Click to disable PvP."],
+        "lore_off": ["§7Click to enable PvP."],
+        "glint_on": true
+      }
     },
     {
       "slot": 14,
@@ -45,12 +64,16 @@
       "slot": 15,
       "item": "minecraft:nether_star",
       "name": "§cAdmin Tools",
-      "lore": ["§7Only visible with the §cadmin§7 tag.", "§8Shift-click to open."],
+      "lore": [
+        "§7Only visible with the §cadmin§7 tag.",
+        "§8Shift-click to activate."
+      ],
       "glint": true,
       "click_type": "shift",
       "condition": { "type": "has_tag", "value": "admin" },
       "actions": [
         { "type": "run_command", "value": "gamemode creative @s", "run_with": "console" },
+        { "type": "message", "value": "§aCreative mode enabled." },
         { "type": "close" }
       ]
     },
@@ -58,10 +81,7 @@
       "slot": 16,
       "item": "minecraft:barrier",
       "name": "§cClose",
-      "lore": [],
-      "actions": [
-        { "type": "close" }
-      ]
+      "actions": [{ "type": "close" }]
     }
   ]
 }

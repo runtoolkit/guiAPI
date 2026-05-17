@@ -1,144 +1,120 @@
 {
-  "title": "§5Feature Showcase",
+  "title": "§5Showcase §8[Page {page1}/{pages}]",
   "rows": 6,
+  "on_open":  [{ "type": "message", "value": "§7Welcome, §f{player}§7! Opening showcase GUI." }],
+  "on_close": [{ "type": "message", "value": "§7Closed showcase GUI." }],
   "buttons": [
     {
-      "slot": 0,
-      "page": 0,
+      "slot": 0, "page": 0,
       "item": "minecraft:lime_stained_glass_pane",
       "name": "§aLeft Click",
       "lore": ["§7Triggers on left-click only."],
       "click_type": "left",
-      "actions": [
-        { "type": "message", "value": "§aYou left-clicked!" }
-      ]
+      "actions": [{ "type": "message", "value": "§aYou left-clicked!" }]
     },
     {
-      "slot": 0,
-      "page": 0,
+      "slot": 0, "page": 0,
       "item": "minecraft:yellow_stained_glass_pane",
       "name": "§eRight Click",
       "lore": ["§7Triggers on right-click only."],
       "click_type": "right",
-      "actions": [
-        { "type": "message", "value": "§eYou right-clicked!" }
-      ]
+      "actions": [{ "type": "message", "value": "§eYou right-clicked!" }]
     },
     {
-      "slot": 1,
-      "page": 0,
+      "slot": 1, "page": 0,
       "item": "minecraft:cyan_stained_glass_pane",
       "name": "§bShift Click",
       "lore": ["§7Triggers on shift+click only."],
       "click_type": "shift",
-      "actions": [
-        { "type": "message", "value": "§bYou shift-clicked!" }
+      "actions": [{ "type": "message", "value": "§bYou shift-clicked!" }]
+    },
+    {
+      "slot": 3, "page": 0,
+      "item": "minecraft:name_tag",
+      "name": "§6{player}",
+      "lore": [
+        "§7Coins: §e{score:coins}",
+        "§7Page: §f{page1} / {pages}",
+        "§7GUI: §8{gui}"
       ]
     },
     {
-      "slot": 3,
-      "page": 0,
-      "item": "minecraft:enchanted_book",
-      "name": "§dGlint Item",
-      "lore": ["§7This item has enchantment glint."],
-      "glint": true,
-      "actions": [
-        { "type": "message", "value": "§dShiny!" }
-      ]
-    },
-    {
-      "slot": 5,
-      "page": 0,
+      "slot": 5, "page": 0,
       "item": "minecraft:nether_star",
       "name": "§6Admin Only",
       "lore": ["§7Visible only with the §cadmin§7 tag."],
       "glint": true,
       "condition": { "type": "has_tag", "value": "admin" },
-      "actions": [
-        { "type": "message", "value": "§6You are an admin." }
-      ]
+      "actions": [{ "type": "message", "value": "§6You are an admin." }]
     },
     {
-      "slot": 7,
-      "page": 0,
-      "item": "minecraft:gold_ingot",
-      "name": "§6Score Check",
-      "lore": ["§7Visible only if §6coins§7 score > 10."],
-      "condition": { "type": "score_gt", "value": "coins:10" },
-      "actions": [
-        { "type": "message", "value": "§6You have enough coins." }
-      ]
+      "slot": 6, "page": 0,
+      "item": "minecraft:barrier",
+      "name": "§cGuest Only",
+      "lore": ["§7Visible only WITHOUT the §cadmin§7 tag."],
+      "condition": { "type": "not_tag", "value": "admin" },
+      "actions": [{ "type": "message", "value": "§cYou are not an admin." }]
     },
     {
-      "slot": 9,
-      "page": 0,
+      "slot": 9, "page": 0,
+      "toggle": {
+        "tag": "showcase_toggle",
+        "item_on":  "minecraft:lime_dye",
+        "item_off": "minecraft:gray_dye",
+        "name_on":  "§aToggle: ON",
+        "name_off": "§7Toggle: OFF",
+        "lore_on":  ["§7Click to turn off.", "§8Tag: showcase_toggle"],
+        "lore_off": ["§7Click to turn on.",  "§8Tag: showcase_toggle"],
+        "glint_on": true
+      }
+    },
+    {
+      "slot": 11, "page": 0,
       "item": "minecraft:paper",
       "name": "§fMulti-Action",
-      "lore": [
-        "§7Runs two commands,",
-        "§7sends a message, then closes."
-      ],
+      "lore": ["§7Two commands, a message, then close."],
       "actions": [
-        { "type": "run_command", "value": "say Action 1" },
-        { "type": "run_command", "value": "say Action 2" },
+        { "type": "run_command", "value": "say §7{player} ran multi-action." },
         { "type": "message", "value": "§7Both commands ran." },
         { "type": "close" }
       ]
     },
     {
-      "slot": 11,
-      "page": 0,
+      "slot": 13, "page": 0,
       "item": "minecraft:command_block",
       "name": "§cConsole Command",
-      "lore": [
-        "§7Runs with console permission.",
-        "§8(run_with: console)"
-      ],
+      "lore": ["§7run_with: console", "§8Only visible to admins."],
       "condition": { "type": "has_tag", "value": "admin" },
       "actions": [
-        { "type": "run_command", "value": "op @s", "run_with": "console" },
-        { "type": "close" }
+        { "type": "run_command", "value": "say {player} used a console action.", "run_with": "console" }
       ]
     },
     {
-      "slot": 53,
-      "page": 0,
+      "slot": 53, "page": 0,
       "item": "minecraft:arrow",
       "name": "§7Next Page →",
       "lore": ["§8Page 1 / 2"],
-      "actions": [
-        { "type": "next_page" }
-      ]
+      "actions": [{ "type": "next_page" }]
     },
     {
-      "slot": 4,
-      "page": 1,
+      "slot": 4, "page": 1,
       "item": "minecraft:ender_eye",
       "name": "§5Page 2",
-      "lore": ["§7You made it to page 2!"],
-      "actions": [
-        { "type": "message", "value": "§5Welcome to page 2." }
-      ]
+      "lore": ["§7You made it!", "§8{player} is on page {page1}."],
+      "actions": [{ "type": "message", "value": "§5Welcome to page 2, {player}!" }]
     },
     {
-      "slot": 45,
-      "page": 1,
+      "slot": 45, "page": 1,
       "item": "minecraft:arrow",
       "name": "§7← Previous Page",
       "lore": ["§8Page 2 / 2"],
-      "actions": [
-        { "type": "prev_page" }
-      ]
+      "actions": [{ "type": "prev_page" }]
     },
     {
-      "slot": 49,
-      "page": 1,
+      "slot": 49, "page": 1,
       "item": "minecraft:barrier",
       "name": "§cClose",
-      "lore": [],
-      "actions": [
-        { "type": "close" }
-      ]
+      "actions": [{ "type": "close" }]
     }
   ]
 }

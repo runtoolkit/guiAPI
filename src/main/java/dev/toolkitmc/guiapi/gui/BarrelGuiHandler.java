@@ -4,7 +4,6 @@ import dev.toolkitmc.guiapi.GuiApiMod;
 import net.minecraft.component.DataComponentTypes;
 import net.minecraft.component.type.LoreComponent;
 import net.minecraft.component.type.NbtComponent;
-import net.minecraft.enchantment.Enchantments;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.entity.player.PlayerInventory;
 import net.minecraft.inventory.SimpleInventory;
@@ -35,8 +34,11 @@ import java.util.UUID;
  *
  * Features:
  *  - Multi-page support (page tracked per player)
- *  - Conditional buttons (has_tag, score_gt/lt/eq)
+ *  - Toggle buttons (tag-backed on/off state)
+ *  - Conditional buttons (has_tag, not_tag, score_gt/lt/eq)
  *  - Multiple actions per button (executed in order)
+ *  - on_open / on_close action hooks
+ *  - Placeholder substitution in text fields
  *  - Enchantment glint on items
  *  - run_command with run_with: player|console
  */
@@ -81,26 +83,28 @@ public class BarrelGuiHandler {
                 return new GuiScreenHandler(rowsToType(rows), syncId, playerInv, inv, rows, def, finalPage);
             }
         });
+
+        // Fire on_open actions after the screen is sent
+        for (GuiDefinition.ButtonAction action : def.getOnOpen()) {
+            executeAction(player, def, page, action);
+        }
     }
 
     public static boolean handleClick(ServerPlayerEntity player, GuiDefinition def,
                                       int page, int slot, int mouseButton, SlotActionType actionType) {
-        // Resolve what kind of click this actually is.
         // mouseButton: 0 = left, 1 = right (Minecraft protocol)
-        // actionType QUICK_MOVE = shift+click
         final boolean isShift = actionType == SlotActionType.QUICK_MOVE;
         final boolean isLeft  = !isShift && mouseButton == 0 && actionType == SlotActionType.PICKUP;
         final boolean isRight = !isShift && mouseButton == 1 && actionType == SlotActionType.PICKUP;
 
         // Consume every action type to block item manipulation.
-        // Only PICKUP and QUICK_MOVE can actually trigger button actions.
         if (!isLeft && !isRight && !isShift) return true;
 
         for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() != slot) continue;
             if (!evaluateCondition(player, btn)) continue;
 
-            // Check click_type filter
+            // click_type filter
             boolean matches = switch (btn.clickType()) {
                 case LEFT  -> isLeft;
                 case RIGHT -> isRight;
@@ -109,7 +113,8 @@ public class BarrelGuiHandler {
             };
             if (!matches) continue;
 
-            for (GuiDefinition.ButtonAction action : btn.actions()) {
+            List<GuiDefinition.ButtonAction> actions = resolveActions(player, btn);
+            for (GuiDefinition.ButtonAction action : actions) {
                 boolean shouldBreak = executeAction(player, def, page, action);
                 if (shouldBreak) break;
             }
@@ -119,7 +124,18 @@ public class BarrelGuiHandler {
     }
 
     public static void onClose(UUID playerUuid) {
-        OPEN_GUIS.remove(playerUuid);
+        OpenState state = OPEN_GUIS.remove(playerUuid);
+        // on_close hooks — need the server player from somewhere; we don't have it here.
+        // Handled in GuiScreenHandler.onClosed() which passes the player directly.
+        // This overload is kept for callers that only have the UUID.
+    }
+
+    public static void onClose(ServerPlayerEntity player) {
+        OpenState state = OPEN_GUIS.remove(player.getUuid());
+        if (state == null) return;
+        for (GuiDefinition.ButtonAction action : state.def().getOnClose()) {
+            executeAction(player, state.def(), state.page(), action);
+        }
     }
 
     // ── Inventory builder ────────────────────────────────────────────────────
@@ -132,57 +148,112 @@ public class BarrelGuiHandler {
 
         for (GuiDefinition.Button btn : def.getButtonsForPage(page)) {
             if (btn.slot() < 0 || btn.slot() >= size) continue;
-            if (!evaluateCondition(player, btn)) continue; // hide button
-            inv.setStack(btn.slot(), buildStack(btn));
+            if (!evaluateCondition(player, btn)) continue;
+            inv.setStack(btn.slot(), buildStack(player, def, page, btn));
         }
 
         return inv;
     }
 
-    private static ItemStack buildStack(GuiDefinition.Button btn) {
-        Identifier itemId = Identifier.tryParse(btn.item());
-        Item item;
-        if (itemId != null && Registries.ITEM.containsId(itemId)) {
-            item = Registries.ITEM.get(itemId);
+    private static ItemStack buildStack(ServerPlayerEntity player,
+                                        GuiDefinition def, int page,
+                                        GuiDefinition.Button btn) {
+        // Resolve toggle state to concrete display values
+        final String  itemId;
+        final String  name;
+        final List<String> lore;
+        final boolean glint;
+
+        if (btn.toggle().isPresent()) {
+            GuiDefinition.ToggleDefinition tgl = btn.toggle().get();
+            boolean on = player.getCommandTags().contains(tgl.tag());
+            itemId = on ? tgl.itemOn()  : tgl.itemOff();
+            name   = on ? tgl.nameOn()  : tgl.nameOff();
+            lore   = on ? tgl.loreOn()  : tgl.loreOff();
+            glint  = on ? tgl.glintOn() : tgl.glintOff();
         } else {
-            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", btn.item(), btn.slot());
+            itemId = btn.item();
+            name   = btn.name();
+            lore   = btn.lore();
+            glint  = btn.glint();
+        }
+
+        Identifier id = Identifier.tryParse(itemId);
+        Item item;
+        if (id != null && Registries.ITEM.containsId(id)) {
+            item = Registries.ITEM.get(id);
+        } else {
+            GuiApiMod.LOGGER.warn("[GuiAPI] Unknown item '{}' in slot {}, falling back to stone.", itemId, btn.slot());
             item = Items.STONE;
         }
 
         ItemStack stack = new ItemStack(item);
 
-        if (!btn.name().isEmpty()) {
+        String resolvedName = resolve(name, player, def, page);
+        if (!resolvedName.isEmpty()) {
             stack.set(DataComponentTypes.CUSTOM_NAME,
-                    Text.literal(btn.name()).styled(s -> s.withItalic(false)));
+                    Text.literal(resolvedName).styled(s -> s.withItalic(false)));
         }
 
-        if (!btn.lore().isEmpty()) {
-            List<Text> loreTexts = btn.lore().stream()
-                    .map(l -> (Text) Text.literal(l).styled(s -> s.withItalic(false)))
+        if (!lore.isEmpty()) {
+            List<Text> loreTexts = lore.stream()
+                    .map(l -> (Text) Text.literal(resolve(l, player, def, page))
+                            .styled(s -> s.withItalic(false)))
                     .toList();
             stack.set(DataComponentTypes.LORE, new LoreComponent(loreTexts));
         }
 
-        // Enchantment glint — add a hidden glint flag via custom_data
-        if (btn.glint()) {
-            stack.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
-        }
+        if (glint) stack.set(DataComponentTypes.ENCHANTMENT_GLINT_OVERRIDE, true);
 
-        // Mark as GUI item (blocks extraction)
+        // Mark as GUI item to block extraction
         stack.set(DataComponentTypes.CUSTOM_DATA, NbtComponent.of(new NbtCompound()));
 
         return stack;
     }
 
+    // ── Placeholder resolution ────────────────────────────────────────────────
+
+    /**
+     * Resolves placeholders in a string:
+     *   {player}    — player name
+     *   {gui}       — GUI id
+     *   {page}      — page index (0-based)
+     *   {page1}     — page index (1-based)
+     *   {pages}     — total page count
+     *   {score:obj} — player score in objective "obj"
+     */
+    static String resolve(String text, ServerPlayerEntity player,
+                          GuiDefinition def, int page) {
+        if (text == null || text.isEmpty() || !text.contains("{")) return text;
+
+        text = text.replace("{player}", player.getDisplayName().getString());
+        text = text.replace("{gui}",    def.getId().toString());
+        text = text.replace("{page}",   String.valueOf(page));
+        text = text.replace("{page1}",  String.valueOf(page + 1));
+        text = text.replace("{pages}",  String.valueOf(def.getPageCount()));
+
+        // {score:objective}
+        int idx;
+        while ((idx = text.indexOf("{score:")) >= 0) {
+            int end = text.indexOf('}', idx);
+            if (end < 0) break;
+            String obj = text.substring(idx + 7, end);
+            int score = getScore(player, obj);
+            text = text.substring(0, idx) + score + text.substring(end + 1);
+        }
+
+        return text;
+    }
+
     // ── Condition evaluation ─────────────────────────────────────────────────
 
-    private static boolean evaluateCondition(ServerPlayerEntity player,
-                                             GuiDefinition.Button btn) {
+    static boolean evaluateCondition(ServerPlayerEntity player, GuiDefinition.Button btn) {
         if (btn.condition().isEmpty()) return true;
 
         GuiDefinition.ButtonCondition cond = btn.condition().get();
         return switch (cond.type()) {
             case HAS_TAG  -> player.getCommandTags().contains(cond.value());
+            case NOT_TAG  -> !player.getCommandTags().contains(cond.value());
             case SCORE_GT -> getScore(player, cond.value().split(":"), 0) >
                              parseCondInt(cond.value().split(":"), 1);
             case SCORE_LT -> getScore(player, cond.value().split(":"), 0) <
@@ -192,24 +263,19 @@ public class BarrelGuiHandler {
         };
     }
 
-    /** value format: "objective:threshold" */
-    private static int getScore(ServerPlayerEntity player, String[] parts, int objIndex) {
-        if (parts.length < 1) return 0;
-        try {
-            Scoreboard sb = player.getServer().getScoreboard();
-            ScoreboardObjective obj = sb.getNullableObjective(parts[objIndex]);
-            if (obj == null) return 0;
-            var score = sb.getScore(ScoreHolder.fromName(player.getNameForScoreboard()), obj);
-            return score != null ? score.getScore() : 0;
-        } catch (Exception e) {
-            return 0;
-        }
-    }
+    // ── Toggle action resolution ─────────────────────────────────────────────
 
-    private static int parseCondInt(String[] parts, int index) {
-        if (parts.length <= index) return 0;
-        try { return Integer.parseInt(parts[index]); }
-        catch (NumberFormatException e) { return 0; }
+    /**
+     * Returns the actions to execute for a click, accounting for toggle state.
+     */
+    private static List<GuiDefinition.ButtonAction> resolveActions(
+            ServerPlayerEntity player, GuiDefinition.Button btn) {
+        if (btn.toggle().isPresent()) {
+            GuiDefinition.ToggleDefinition tgl = btn.toggle().get();
+            boolean on = player.getCommandTags().contains(tgl.tag());
+            return on ? tgl.actionsOn() : tgl.actionsOff();
+        }
+        return btn.actions();
     }
 
     // ── Action execution ─────────────────────────────────────────────────────
@@ -218,19 +284,19 @@ public class BarrelGuiHandler {
      * Execute a single action.
      * @return true if the action chain should stop (screen was closed/changed)
      */
-    private static boolean executeAction(ServerPlayerEntity player, GuiDefinition def,
-                                         int currentPage, GuiDefinition.ButtonAction action) {
+    static boolean executeAction(ServerPlayerEntity player, GuiDefinition def,
+                                 int currentPage, GuiDefinition.ButtonAction action) {
         MinecraftServer server = player.getServer();
         switch (action.type()) {
             case RUN_COMMAND -> {
                 String cmd = action.value().startsWith("/")
                         ? action.value().substring(1) : action.value();
+                // Resolve placeholders in command value too
+                cmd = resolve(cmd, player, def, currentPage);
                 if (action.runWith() == GuiDefinition.RunWith.CONSOLE) {
-                    server.getCommandManager().executeWithPrefix(
-                            server.getCommandSource(), cmd);
+                    server.getCommandManager().executeWithPrefix(server.getCommandSource(), cmd);
                 } else {
-                    server.getCommandManager().executeWithPrefix(
-                            player.getCommandSource(), cmd);
+                    server.getCommandManager().executeWithPrefix(player.getCommandSource(), cmd);
                 }
             }
             case CLOSE -> {
@@ -250,7 +316,8 @@ public class BarrelGuiHandler {
                 }
                 return true;
             }
-            case MESSAGE -> player.sendMessage(Text.literal(action.value()), false);
+            case MESSAGE -> player.sendMessage(
+                    Text.literal(resolve(action.value(), player, def, currentPage)), false);
             case NEXT_PAGE -> {
                 int next = currentPage + 1;
                 if (next < def.getPageCount()) {
@@ -279,6 +346,31 @@ public class BarrelGuiHandler {
             }
         }
         return false;
+    }
+
+    // ── Score helpers ─────────────────────────────────────────────────────────
+
+    private static int getScore(ServerPlayerEntity player, String[] parts, int objIndex) {
+        if (parts.length <= objIndex) return 0;
+        return getScore(player, parts[objIndex]);
+    }
+
+    private static int getScore(ServerPlayerEntity player, String objective) {
+        try {
+            Scoreboard sb = player.getServer().getScoreboard();
+            ScoreboardObjective obj = sb.getNullableObjective(objective);
+            if (obj == null) return 0;
+            var score = sb.getScore(ScoreHolder.fromName(player.getNameForScoreboard()), obj);
+            return score != null ? score.getScore() : 0;
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    private static int parseCondInt(String[] parts, int index) {
+        if (parts.length <= index) return 0;
+        try { return Integer.parseInt(parts[index]); }
+        catch (NumberFormatException e) { return 0; }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

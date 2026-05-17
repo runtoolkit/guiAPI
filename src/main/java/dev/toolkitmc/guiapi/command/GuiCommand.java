@@ -30,6 +30,7 @@ public class GuiCommand {
         dispatcher.register(
             CommandManager.literal("guiapi")
                 .requires(src -> src.hasPermissionLevel(2))
+                .executes(GuiCommand::showHelp)
 
                 .then(CommandManager.literal("open")
                     .then(CommandManager.argument("id", IdentifierArgumentType.identifier())

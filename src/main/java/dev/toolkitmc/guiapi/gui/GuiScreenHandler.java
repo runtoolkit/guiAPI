@@ -49,6 +49,10 @@ public class GuiScreenHandler extends GenericContainerScreenHandler {
     @Override
     public void onClosed(PlayerEntity player) {
         super.onClosed(player);
-        BarrelGuiHandler.onClose(player.getUuid());
+        if (player instanceof ServerPlayerEntity sp) {
+            BarrelGuiHandler.onClose(sp); // fires on_close actions
+        } else {
+            BarrelGuiHandler.onClose(player.getUuid());
+        }
     }
 }
