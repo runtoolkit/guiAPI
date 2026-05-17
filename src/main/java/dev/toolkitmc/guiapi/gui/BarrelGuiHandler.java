@@ -67,14 +67,12 @@ public class BarrelGuiHandler {
         OPEN_GUIS.put(player.getUuid(), new OpenState(def, page));
         SimpleInventory inv = buildInventory(player, def, page, rows * 9);
 
-        String pageIndicator = def.getPageCount() > 1
-                ? " §8[" + (page + 1) + "/" + def.getPageCount() + "]"
-                : "";
+        String resolvedTitle = resolve(def.getTitle(), player, def, page);
 
         player.openHandledScreen(new NamedScreenHandlerFactory() {
             @Override
             public Text getDisplayName() {
-                return Text.literal(def.getTitle() + pageIndicator);
+                return Text.literal(resolvedTitle);
             }
 
             @Override
