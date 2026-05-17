@@ -133,6 +133,7 @@ public class BarrelGuiHandler {
                     if (shouldBreak) { chainBroken = true; break; }
                 }
                 if (!chainBroken) {
+                    navigateAway(player);
                     player.closeHandledScreen();
                     open(player, def, page);
                 }
@@ -155,14 +156,27 @@ public class BarrelGuiHandler {
         // This overload is kept for callers that only have the UUID.
     }
 
+    /**
+     * Called when the player genuinely closes the GUI (ESC, etc.).
+     * Fires on_close actions and clears runtime variables.
+     */
     public static void onClose(ServerPlayerEntity player) {
         OpenState state = OPEN_GUIS.remove(player.getUuid());
         if (state == null) return;
         for (GuiDefinition.ButtonAction action : state.def().getOnClose()) {
             executeAction(player, state.def(), state.page(), action);
         }
-        // Clear per-player runtime variables when the GUI closes.
+        // Only clear vars on a real close, not on GUI navigation (open_gui, next/prev_page).
+        // Navigation removes the state via navigateAway() before calling closeHandledScreen().
         GuiVarStore.INSTANCE.clear(player.getUuid());
+    }
+
+    /**
+     * Called internally before navigating to another GUI or page.
+     * Removes open state WITHOUT clearing runtime variables.
+     */
+    private static void navigateAway(ServerPlayerEntity player) {
+        OPEN_GUIS.remove(player.getUuid());
     }
 
     // ── Inventory builder ────────────────────────────────────────────────────
@@ -361,6 +375,7 @@ public class BarrelGuiHandler {
                 return true;
             }
             case OPEN_GUI -> {
+                navigateAway(player);
                 player.closeHandledScreen();
                 Identifier targetId = Identifier.tryParse(action.value());
                 if (targetId != null) {
@@ -378,6 +393,7 @@ public class BarrelGuiHandler {
             case NEXT_PAGE -> {
                 int next = currentPage + 1;
                 if (next < def.getPageCount()) {
+                    navigateAway(player);
                     player.closeHandledScreen();
                     open(player, def, next);
                 }
@@ -386,6 +402,7 @@ public class BarrelGuiHandler {
             case PREV_PAGE -> {
                 int prev = currentPage - 1;
                 if (prev >= 0) {
+                    navigateAway(player);
                     player.closeHandledScreen();
                     open(player, def, prev);
                 }
@@ -427,6 +444,7 @@ public class BarrelGuiHandler {
                 try {
                     int target = Integer.parseInt(action.value());
                     if (target >= 0 && target < def.getPageCount()) {
+                        navigateAway(player);
                         player.closeHandledScreen();
                         open(player, def, target);
                     }
