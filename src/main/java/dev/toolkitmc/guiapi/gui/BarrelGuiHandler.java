@@ -115,16 +115,40 @@ public class BarrelGuiHandler {
 
             boolean isToggle = btn.toggle().isPresent();
             List<GuiDefinition.ButtonAction> actions = resolveActions(player, btn);
-            boolean chainBroken = false;
+
+            // For toggle buttons: apply the tag flip directly in Java (synchronous)
+            // before running custom actions and reopening. This avoids the race
+            // between command dispatcher execution and inventory rebuild.
+            if (isToggle) {
+                GuiDefinition.ToggleDefinition tgl = btn.toggle().get();
+                boolean wasOn = player.getCommandTags().contains(tgl.tag());
+                if (wasOn) {
+                    player.removeCommandTag(tgl.tag());
+                } else {
+                    player.addCommandTag(tgl.tag());
+                }
+                // Run any custom side-effect actions (skip default tag commands)
+                boolean chainBroken = false;
+                for (GuiDefinition.ButtonAction action : actions) {
+                    // Skip the auto-generated tag add/remove defaults
+                    if (action.runWith() == GuiDefinition.RunWith.CONSOLE
+                            && (action.value().startsWith("tag @s add " + tgl.tag())
+                             || action.value().startsWith("tag @s remove " + tgl.tag()))) {
+                        continue;
+                    }
+                    boolean shouldBreak = executeAction(player, def, page, action);
+                    if (shouldBreak) { chainBroken = true; break; }
+                }
+                if (!chainBroken) {
+                    player.closeHandledScreen();
+                    open(player, def, page);
+                }
+                return true;
+            }
+
             for (GuiDefinition.ButtonAction action : actions) {
                 boolean shouldBreak = executeAction(player, def, page, action);
-                if (shouldBreak) { chainBroken = true; break; }
-            }
-            // Toggle buttons must reopen the GUI to reflect the new state.
-            // Only reopen if no action already closed/navigated the screen.
-            if (isToggle && !chainBroken) {
-                player.closeHandledScreen();
-                open(player, def, page);
+                if (shouldBreak) break;
             }
             return true;
         }
