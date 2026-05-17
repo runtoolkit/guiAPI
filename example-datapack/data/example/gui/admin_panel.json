@@ -2,7 +2,8 @@
   "title": "§6Admin Panel §8— {player}",
   "rows": 3,
   "on_open": [
-    { "type": "run_command", "value": "tag @s add in_admin_panel", "run_with": "console" }
+    { "type": "run_command", "value": "tag @s add in_admin_panel", "run_with": "console" },
+    { "type": "sound", "value": "minecraft:block.note_block.pling:1.0:1.2" }
   ],
   "on_close": [
     { "type": "run_command", "value": "tag @s remove in_admin_panel", "run_with": "console" }
@@ -14,6 +15,7 @@
       "name": "§aRules",
       "lore": ["§7Click to see the server rules."],
       "actions": [
+        { "type": "sound", "value": "minecraft:entity.experience_orb.pickup" },
         { "type": "message", "value": "§6Rules: §fBe respectful. No griefing. No cheating." }
       ]
     },
@@ -25,6 +27,7 @@
       "click_type": "left",
       "actions": [
         { "type": "run_command", "value": "tp @s 0 64 0" },
+        { "type": "sound", "value": "minecraft:entity.enderman.teleport" },
         { "type": "close" }
       ]
     },
@@ -46,9 +49,17 @@
         "item_off": "minecraft:shield",
         "name_on":  "§cPvP: ON",
         "name_off": "§aPvP: OFF",
-        "lore_on":  ["§7Click to disable PvP."],
-        "lore_off": ["§7Click to enable PvP."],
-        "glint_on": true
+        "lore_on":  ["§7Click to disable PvP.", "§8Player: {player}"],
+        "lore_off": ["§7Click to enable PvP.",  "§8Player: {player}"],
+        "glint_on": true,
+        "actions_on": [
+          { "type": "sound", "value": "minecraft:block.anvil.land:0.5:1.0" },
+          { "type": "message", "value": "§cPvP disabled, {player}." }
+        ],
+        "actions_off": [
+          { "type": "sound", "value": "minecraft:entity.player.attack.sweep" },
+          { "type": "message", "value": "§aPvP enabled, {player}!" }
+        ]
       }
     },
     {
@@ -73,7 +84,8 @@
       "condition": { "type": "has_tag", "value": "admin" },
       "actions": [
         { "type": "run_command", "value": "gamemode creative @s", "run_with": "console" },
-        { "type": "message", "value": "§aCreative mode enabled." },
+        { "type": "sound", "value": "minecraft:ui.toast.challenge_complete:1.0:0.8" },
+        { "type": "message", "value": "§aCreative mode enabled, {player}." },
         { "type": "close" }
       ]
     },
@@ -81,7 +93,10 @@
       "slot": 16,
       "item": "minecraft:barrier",
       "name": "§cClose",
-      "actions": [{ "type": "close" }]
+      "actions": [
+        { "type": "sound", "value": "minecraft:block.wooden_button.click_off" },
+        { "type": "close" }
+      ]
     }
   ]
 }

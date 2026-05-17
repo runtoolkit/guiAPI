@@ -99,7 +99,7 @@ public class GuiDefinition {
     }
 
     public enum ActionType {
-        RUN_COMMAND, CLOSE, OPEN_GUI, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE;
+        RUN_COMMAND, CLOSE, OPEN_GUI, MESSAGE, NEXT_PAGE, PREV_PAGE, GOTO_PAGE, SOUND;
 
         public static ActionType fromString(String s) {
             return switch (s.toLowerCase()) {
@@ -110,6 +110,7 @@ public class GuiDefinition {
                 case "next_page"   -> NEXT_PAGE;
                 case "prev_page"   -> PREV_PAGE;
                 case "goto_page"   -> GOTO_PAGE;
+                case "sound"       -> SOUND;
                 default            -> CLOSE;
             };
         }

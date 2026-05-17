@@ -108,6 +108,7 @@ Supported in `title`, button `name`, `lore`, `message` values, and `run_command`
 | `close` | — | — | Close the GUI. |
 | `open_gui` | `namespace:name` | — | Close and open another GUI. |
 | `message` | Text string | — | Send a chat message to the player. Supports placeholders. |
+| `sound` | `namespace:sound.id` or `namespace:sound.id:volume:pitch` | — | Play a sound to the player. Volume and pitch default to `1.0`. |
 | `next_page` | — | — | Go to the next page. |
 | `prev_page` | — | — | Go to the previous page. |
 | `goto_page` | Page index (string) | — | Jump to a specific page. |
@@ -137,10 +138,10 @@ A toggle button shows different item/name/lore/actions depending on a scoreboard
 | `name_on` / `name_off` | string | `§aEnabled` / `§7Disabled` | Display name in each state. |
 | `lore_on` / `lore_off` | string[] | `[]` | Lore in each state. |
 | `glint_on` / `glint_off` | boolean | `false` | Glint in each state. |
-| `actions_on` | action[] | `[tag @s remove <tag>]` | Actions when clicking while ON. Default removes the tag. |
-| `actions_off` | action[] | `[tag @s add <tag>]` | Actions when clicking while OFF. Default adds the tag. |
+| `actions_on` | action[] | `[tag @s remove <tag>]` | Actions executed when clicking while ON (turning OFF). Default removes the tag. |
+| `actions_off` | action[] | `[tag @s add <tag>]` | Actions executed when clicking while OFF (turning ON). Default adds the tag. |
 
-The default `actions_on`/`actions_off` use `run_with: console` and handle the tag automatically — you only need to specify them if you want additional side effects.
+The tag is flipped via Java API before `actions_on`/`actions_off` run, so there is no race condition. Custom actions are executed in order after the flip — use them for sounds, messages, or side-effect commands. The GUI always reopens automatically to show the new state unless an action in the chain closes or navigates away.
 
 ---
 
@@ -204,8 +205,16 @@ The default `actions_on`/`actions_off` use `run_with: console` and handle the ta
     "item_off":  "minecraft:barrier",
     "name_on":   "§aNotifications: ON",
     "name_off":  "§cNotifications: OFF",
-    "lore_on":   ["§7Click to disable."],
-    "lore_off":  ["§7Click to enable."]
+    "lore_on":   ["§7Click to disable.", "§8Player: {player}"],
+    "lore_off":  ["§7Click to enable.",  "§8Player: {player}"],
+    "actions_on": [
+      { "type": "sound",   "value": "minecraft:block.lever.click:1.0:0.8" },
+      { "type": "message", "value": "§7Notifications disabled, {player}." }
+    ],
+    "actions_off": [
+      { "type": "sound",   "value": "minecraft:block.lever.click:1.0:1.2" },
+      { "type": "message", "value": "§aNotifications enabled, {player}!" }
+    ]
   }
 }
 ```
