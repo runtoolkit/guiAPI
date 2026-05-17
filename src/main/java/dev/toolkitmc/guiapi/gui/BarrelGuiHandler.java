@@ -113,10 +113,18 @@ public class BarrelGuiHandler {
             };
             if (!matches) continue;
 
+            boolean isToggle = btn.toggle().isPresent();
             List<GuiDefinition.ButtonAction> actions = resolveActions(player, btn);
+            boolean chainBroken = false;
             for (GuiDefinition.ButtonAction action : actions) {
                 boolean shouldBreak = executeAction(player, def, page, action);
-                if (shouldBreak) break;
+                if (shouldBreak) { chainBroken = true; break; }
+            }
+            // Toggle buttons must reopen the GUI to reflect the new state.
+            // Only reopen if no action already closed/navigated the screen.
+            if (isToggle && !chainBroken) {
+                player.closeHandledScreen();
+                open(player, def, page);
             }
             return true;
         }
