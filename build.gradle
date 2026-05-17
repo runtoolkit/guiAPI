@@ -40,8 +40,10 @@ dependencies {
     // Mod Menu (optional)
     modCompileOnly "maven.modrinth:modmenu:11.0.3"
 
-    // Bundle guiAPI-advancement inside the guiAPI jar
-    include(modImplementation("dev.toolkitmc:guiapi-advancement:${project.guiapi_advancement_version}"))
+    // Bundle guiAPI-advancement inside the guiAPI jar (skip during publishToMavenLocal bootstrap)
+    if (!project.hasProperty('skipAdvancement')) {
+        include(modImplementation("dev.toolkitmc:guiapi-advancement:${project.guiapi_advancement_version}"))
+    }
 
 }
 

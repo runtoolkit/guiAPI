@@ -29,10 +29,10 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
-      - name: Publish guiAPI to mavenLocal
+      - name: Publish guiAPI to mavenLocal (without advancement bundle)
         run: |
           chmod +x gradlew
-          ./gradlew clean publishToMavenLocal --no-daemon
+          ./gradlew clean publishToMavenLocal -PskipAdvancement --no-daemon
 
       - name: Publish guiAPI-advancement to mavenLocal
         run: |
@@ -41,7 +41,7 @@ jobs:
           chmod +x gradlew
           ./gradlew clean publishToMavenLocal --no-daemon
 
-      - name: Build
+      - name: Build (with advancement bundle)
         run: ./gradlew build --no-daemon
 
       - name: Upload artifact
